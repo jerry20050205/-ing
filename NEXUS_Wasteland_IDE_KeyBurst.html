@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>NEXUS IDE // Wasteland Operations Console</title>
+<style>
+:root{
+  --bg:#090d12;--bg-2:#0d131b;--panel:#111822;--panel-2:#151e2a;--panel-3:#0b1017;
+  --line:#263342;--line-soft:#1a2531;--text:#d7e0ea;--muted:#7f91a5;--dim:#536579;
+  --blue:#58a6ff;--cyan:#52d6e8;--green:#46d17a;--yellow:#e4b84d;--orange:#ff8a4c;
+  --red:#ff5e66;--purple:#b695ff;--shadow:0 18px 55px rgba(0,0,0,.38);
+  --mono:"Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--sans)}
+button,input,textarea{font:inherit}
+button{color:inherit}
+::selection{background:rgba(82,214,232,.25)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#263545;border:2px solid transparent;background-clip:padding-box;border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:9996;background:repeating-linear-gradient(180deg,rgba(255,255,255,.018) 0,rgba(255,255,255,.018) 1px,transparent 1px,transparent 4px);mix-blend-mode:soft-light;opacity:.34}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9995;background:radial-gradient(circle at 50% 50%,transparent 46%,rgba(0,0,0,.42) 120%)}
+body.high-alert{--blue:#ff765c;--cyan:#ffb15f}
+body.shake{animation:screenShake .24s linear}
+@keyframes screenShake{0%,100%{transform:none}20%{transform:translate(-3px,2px)}40%{transform:translate(3px,-1px)}60%{transform:translate(-2px,-2px)}80%{transform:translate(2px,1px)}}
+
+/* Boot */
+.boot-screen{position:fixed;inset:0;z-index:20000;background:#05080c;display:grid;place-items:center;transition:opacity .6s ease,visibility .6s ease}
+.boot-screen.hidden{opacity:0;visibility:hidden}
+.boot-card{width:min(660px,88vw);font-family:var(--mono);padding:30px;border:1px solid #263749;background:linear-gradient(180deg,rgba(14,23,33,.94),rgba(5,9,14,.97));box-shadow:0 0 70px rgba(82,214,232,.08),var(--shadow);position:relative;overflow:hidden}
+.boot-card::before{content:"";position:absolute;inset:-100% 0;background:linear-gradient(180deg,transparent,rgba(82,214,232,.06),transparent);animation:scanner 2.6s linear infinite}
+@keyframes scanner{to{transform:translateY(75%)}}
+.boot-logo{font-weight:900;letter-spacing:.35em;color:var(--cyan);font-size:clamp(26px,5vw,42px);text-shadow:0 0 22px rgba(82,214,232,.35)}
+.boot-sub{margin-top:6px;color:var(--muted);font-size:12px;letter-spacing:.18em}
+.boot-log{height:155px;margin:26px 0 18px;padding:14px;background:#04070b;border:1px solid #172331;overflow:hidden;color:#8da0b4;font-size:12px;line-height:1.7}
+.boot-line.ok{color:var(--green)}.boot-line.warn{color:var(--yellow)}
+.boot-progress{height:5px;background:#101923;overflow:hidden}.boot-progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--cyan));box-shadow:0 0 16px var(--cyan);transition:width .28s ease}
+.boot-actions{display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:11px;color:var(--dim)}
+.boot-actions button{border:1px solid #2e455a;background:#0c151e;padding:8px 13px;border-radius:4px;cursor:pointer;color:var(--cyan)}
+
+/* Shell */
+.app{height:100%;display:grid;grid-template-rows:38px 1fr 27px;min-width:850px;position:relative}
+.titlebar{height:38px;background:linear-gradient(180deg,#0d141d,#080c12);border-bottom:1px solid var(--line);display:grid;grid-template-columns:auto 1fr auto;align-items:center;z-index:200;user-select:none}
+.brand{height:100%;display:flex;align-items:center;padding:0 12px;border-right:1px solid var(--line);font:700 12px var(--mono);letter-spacing:.12em;color:var(--cyan);gap:9px}
+.brand-mark{width:16px;height:16px;border:2px solid currentColor;transform:rotate(45deg);box-shadow:inset 0 0 8px currentColor,0 0 12px rgba(82,214,232,.25)}
+.menus{height:100%;display:flex;align-items:center;padding-left:6px;position:relative}
+.menu{height:100%;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);cursor:pointer;position:relative}
+.menu:hover,.menu.open{background:rgba(255,255,255,.055);color:var(--text)}
+.menu-dropdown{display:none;position:absolute;top:35px;left:0;min-width:220px;padding:6px;background:#101821;border:1px solid #314154;border-radius:0 0 6px 6px;box-shadow:var(--shadow);z-index:1000}
+.menu.open .menu-dropdown{display:block}
+.menu-action{display:flex;justify-content:space-between;gap:20px;padding:7px 10px;border-radius:4px;white-space:nowrap;color:#b9c6d3}
+.menu-action:hover{background:rgba(88,166,255,.12);color:#fff}.menu-action kbd{color:var(--dim);font:11px var(--mono)}
+.window-caption{position:absolute;left:50%;transform:translateX(-50%);font:11px var(--mono);color:#607287;pointer-events:none;letter-spacing:.06em}
+.title-actions{display:flex;height:100%;align-items:center}
+.sys-pill{display:flex;align-items:center;gap:7px;height:24px;padding:0 10px;margin-right:7px;border:1px solid var(--line);background:#0b1118;border-radius:14px;color:var(--muted);font:10px var(--mono)}
+.pulse-dot{width:7px;height:7px;background:var(--green);border-radius:50%;box-shadow:0 0 10px var(--green);animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.45;transform:scale(.8)}}
+.win-btn{width:42px;height:100%;border:0;background:transparent;cursor:pointer;color:var(--muted)}.win-btn:hover{background:rgba(255,255,255,.07);color:#fff}.win-btn.close:hover{background:#d94b4b}
+
+.shell{display:grid;grid-template-columns:46px 226px minmax(450px,1fr) 260px;min-height:0;background:var(--bg)}
+.activitybar{background:#0b1118;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:5px 0;z-index:120}
+.activity-btn{width:46px;height:45px;border:0;background:transparent;color:#60758b;cursor:pointer;display:grid;place-items:center;font-size:19px;position:relative}
+.activity-btn:hover{color:#dbe7f3}.activity-btn.active{color:var(--cyan)}.activity-btn.active::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:2px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.activity-spacer{flex:1}
+.sidepanel{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0;z-index:110}
+.side-title{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;color:#9badbf;font:700 11px var(--mono);letter-spacing:.08em;border-bottom:1px solid var(--line-soft)}
+.side-title button{border:0;background:none;color:var(--muted);cursor:pointer}
+.section-title{height:27px;display:flex;align-items:center;gap:7px;padding:0 10px;background:#0e151e;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);font:700 10px var(--mono);color:#879aad;letter-spacing:.05em;cursor:pointer}
+.section-title .chev{font-size:9px;transition:.18s}.section-title.collapsed .chev{transform:rotate(-90deg)}
+.tree{padding:5px 5px 10px;overflow:auto;min-height:115px}
+.tree.hidden,.mission-list.hidden{display:none}
+.folder-row,.file-row{height:27px;display:flex;align-items:center;gap:7px;padding:0 7px;border-radius:4px;color:#91a1b2;font-size:12px;cursor:pointer;white-space:nowrap}
+.folder-row:hover,.file-row:hover{background:rgba(255,255,255,.045);color:#d8e0e8}.file-row.active{background:rgba(82,214,232,.1);color:#dffbff}.file-row.dirty::after{content:"●";margin-left:auto;color:var(--yellow);font-size:8px}
+.file-icon{width:16px;text-align:center;font:700 10px var(--mono)}.ts{color:#4fafff}.rs{color:#ff8f62}.json{color:#e5c252}.md{color:#8ab4f8}.cssi{color:#bc8cff}.jsi{color:#f2d15d}
+.mission-list{padding:8px;display:flex;flex-direction:column;gap:7px}
+.mission{padding:9px;border:1px solid var(--line-soft);background:#0d141c;border-radius:5px;position:relative;overflow:hidden}
+.mission::after{content:"";position:absolute;bottom:0;left:0;height:2px;width:var(--progress,0%);background:var(--blue);transition:.35s}
+.mission.done::after{background:var(--green)}.mission-name{font-size:11px;color:#c4d0dc}.mission-meta{display:flex;justify-content:space-between;margin-top:6px;color:var(--dim);font:9px var(--mono)}
+.contam-card{margin-top:auto;padding:11px;border-top:1px solid var(--line);background:linear-gradient(180deg,#111923,#0a1017)}
+.contam-head{display:flex;justify-content:space-between;font:10px var(--mono);color:#93a5b7}.contam-value{color:var(--green)}
+.meter{height:6px;background:#070b10;border:1px solid #1e2b38;border-radius:6px;overflow:hidden;margin:7px 0}.meter>i{height:100%;width:12%;display:block;background:linear-gradient(90deg,var(--green),var(--yellow),var(--red));transition:.5s}
+.contam-note{font-size:9px;color:var(--dim);line-height:1.45}
+
+/* Editor */
+.workbench{display:grid;grid-template-rows:35px 35px minmax(220px,1fr) 5px 205px;min-width:0;min-height:0;background:var(--bg-2);z-index:90}
+.tabs{display:flex;align-items:stretch;background:#0b1118;border-bottom:1px solid var(--line);overflow:auto}
+.tab{min-width:132px;max-width:220px;padding:0 10px;display:flex;align-items:center;gap:7px;border-right:1px solid var(--line);background:#0d141d;color:#718397;font-size:11px;cursor:pointer;position:relative}
+.tab:hover{color:#c8d5e2}.tab.active{background:var(--bg-2);color:#dfe9f2}.tab.active::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--cyan)}.tab .close-tab{margin-left:auto;color:#576a7e;opacity:0}.tab:hover .close-tab{opacity:1}.tab .dirty-dot{margin-left:auto;color:var(--yellow);font-size:8px}
+.toolbar{display:flex;align-items:center;gap:6px;padding:0 8px;background:#0d141d;border-bottom:1px solid var(--line-soft)}
+.tool-btn{height:25px;padding:0 9px;border:1px solid #2a3948;background:#111a24;border-radius:4px;color:#98a9ba;font:10px var(--mono);cursor:pointer;display:flex;align-items:center;gap:6px}.tool-btn:hover{border-color:#456079;color:#eef7ff;background:#172331}.tool-btn.primary{color:#caffdb;border-color:rgba(70,209,122,.35);background:rgba(70,209,122,.08)}.tool-btn.danger{color:#ffbdc0;border-color:rgba(255,94,102,.35);background:rgba(255,94,102,.07)}
+.breadcrumb{margin-left:5px;color:#607286;font:10px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.toolbar-spacer{flex:1}.save-state{font:9px var(--mono);color:var(--dim)}
+.editor-wrap{position:relative;display:grid;grid-template-columns:48px 1fr;min-height:0;overflow:hidden;background:#0c1219}
+.line-numbers{padding:13px 9px 30px 0;text-align:right;overflow:hidden;color:#425466;font:12px/1.58 var(--mono);border-right:1px solid #182431;user-select:none;background:#0a1016;white-space:pre}
+.code-editor{resize:none;border:0;outline:0;width:100%;height:100%;padding:13px 16px 30px;background:transparent;color:#d3deea;caret-color:var(--cyan);font:12px/1.58 var(--mono);tab-size:4;white-space:pre;overflow:auto;spellcheck:false}
+.code-editor:focus{background:linear-gradient(90deg,rgba(82,214,232,.012),transparent 35%)}
+.editor-cursor-glow{position:absolute;width:210px;height:120px;border-radius:50%;pointer-events:none;background:radial-gradient(circle,rgba(82,214,232,.045),transparent 68%);transform:translate(-50%,-50%);opacity:0;transition:opacity .2s}
+.editor-wrap:hover .editor-cursor-glow{opacity:1}
+.editor-wrap.typing-live{box-shadow:inset 0 0 0 1px rgba(82,214,232,.24),inset 0 0 38px rgba(82,214,232,.04)}
+.editor-wrap.typing-live::before{content:"";position:absolute;left:48px;right:0;height:2px;top:-3px;z-index:8;pointer-events:none;background:linear-gradient(90deg,transparent,var(--cyan),#fff,var(--purple),transparent);box-shadow:0 0 15px var(--cyan);animation:typeScan .72s linear infinite}
+@keyframes typeScan{to{transform:translateY(calc(100vh - 210px))}}
+.typing-hud{position:absolute;right:14px;top:11px;z-index:12;display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid rgba(82,214,232,.22);background:rgba(5,11,17,.84);backdrop-filter:blur(6px);border-radius:4px;opacity:0;transform:translateY(-5px);pointer-events:none;transition:.22s;box-shadow:0 10px 24px rgba(0,0,0,.3)}
+.typing-hud.show{opacity:1;transform:none}.typing-led{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);animation:pulse .65s infinite}.typing-hud strong{font:700 10px var(--mono);color:#e9fbff}.typing-hud em{font:9px var(--mono);font-style:normal;color:#6f8598}.typing-hud.waiting .typing-led{background:var(--yellow);box-shadow:0 0 10px var(--yellow)}
+.tool-btn.typing-on{color:#e7fdff;border-color:rgba(82,214,232,.55);background:rgba(82,214,232,.12);box-shadow:0 0 13px rgba(82,214,232,.12)}
+body.typing-overdrive .statusbar{background:linear-gradient(90deg,#0b5d70,#423c8c,#0f7190);background-size:180% 100%;animation:statusFlow 1s linear infinite}
+.typing-hud.overdrive{border-color:rgba(255,255,255,.72);background:linear-gradient(90deg,rgba(15,40,55,.95),rgba(72,39,104,.94));box-shadow:0 0 34px rgba(82,214,232,.32),0 0 54px rgba(182,149,255,.20)}.typing-hud.overdrive .typing-led{background:#fff;box-shadow:0 0 15px #fff,0 0 28px var(--purple);animation:pulse .18s infinite}body.key-overdrive #app{animation:keyOverdriveKick .42s steps(2);filter:saturate(1.28) contrast(1.08)}body.key-overdrive .editor-wrap{box-shadow:inset 0 0 0 1px rgba(255,255,255,.34),inset 0 0 80px rgba(82,214,232,.09),0 0 35px rgba(182,149,255,.12)}@keyframes keyOverdriveKick{0%,100%{transform:none}18%{transform:translateX(-3px) skewX(-.3deg)}36%{transform:translateX(4px)}58%{transform:translateY(-2px)}76%{transform:translateX(-2px)}}
+@keyframes statusFlow{to{background-position:180% 0}}
+.resizer{background:#14202b;cursor:row-resize;position:relative}.resizer:hover,.resizer.dragging{background:var(--cyan);box-shadow:0 0 10px rgba(82,214,232,.35)}
+.bottom-panel{display:grid;grid-template-columns:minmax(300px,1.18fr) minmax(260px,.82fr);min-height:0;background:#0b1118}
+.panel{display:flex;flex-direction:column;min-width:0;min-height:0;border-right:1px solid var(--line)}.panel:last-child{border-right:0}
+.panel-tabs{height:30px;display:flex;align-items:center;background:#0d141d;border-bottom:1px solid var(--line-soft)}
+.panel-tab{height:100%;padding:0 13px;border:0;background:transparent;color:#64778b;font:10px var(--mono);cursor:pointer;border-bottom:2px solid transparent}.panel-tab.active{color:#d6e3ef;border-color:var(--cyan)}
+.panel-actions{margin-left:auto;display:flex;padding-right:6px}.mini-btn{width:25px;height:24px;border:0;background:transparent;color:#607387;cursor:pointer}.mini-btn:hover{color:#fff;background:rgba(255,255,255,.05)}
+.terminal{flex:1;padding:9px 11px;overflow:auto;font:11px/1.55 var(--mono);color:#8da0b4}.term-line{white-space:pre-wrap}.term-ok{color:var(--green)}.term-warn{color:var(--yellow)}.term-error{color:var(--red)}.term-cyan{color:var(--cyan)}
+.term-input-row{display:flex;align-items:center;color:var(--green)}.term-prompt{white-space:pre}.term-input{flex:1;border:0;outline:0;background:transparent;color:#d6e3ef;font:11px var(--mono);padding-left:5px}
+.chat{flex:1;overflow:auto;padding:9px;display:flex;flex-direction:column;gap:8px}.bubble{max-width:90%;padding:7px 9px;border-radius:6px;font-size:11px;line-height:1.45;border:1px solid var(--line-soft)}.bubble.bot{align-self:flex-start;background:rgba(182,149,255,.08);border-color:rgba(182,149,255,.2)}.bubble.user{align-self:flex-end;background:rgba(88,166,255,.1);border-color:rgba(88,166,255,.22)}.bubble small{display:block;color:var(--dim);margin-top:4px;font:8px var(--mono)}
+.chat-compose{height:38px;padding:5px 7px;display:flex;gap:5px;border-top:1px solid var(--line-soft)}.chat-compose input{flex:1;min-width:0;border:1px solid #273748;background:#0a1017;color:#d8e4ef;padding:0 8px;border-radius:4px;outline:0;font-size:11px}.chat-compose input:focus{border-color:#42617d}.chat-compose button{width:34px;border:1px solid #2d4256;background:#111c27;color:var(--cyan);border-radius:4px;cursor:pointer}
+
+/* Monitor */
+.monitor{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-width:0;z-index:110}
+.monitor-head{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;background:#0d141d;border-bottom:1px solid var(--line);font:700 10px var(--mono);letter-spacing:.08em}.live{color:var(--green);font-size:9px;display:flex;align-items:center;gap:5px}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:7px;border-bottom:1px solid var(--line-soft)}
+.kpi{background:#0c131b;border:1px solid #1e2c3a;padding:7px;border-radius:5px;min-width:0}.kpi-label{font:8px var(--mono);color:#65788d;letter-spacing:.06em}.kpi-value{margin-top:4px;font:700 16px var(--mono);color:#d9e6f1}.kpi-value em{font-style:normal;font-size:8px;color:#607489;margin-left:3px}.kpi-delta{font:8px var(--mono);color:var(--green);margin-top:3px}.kpi-delta.bad{color:var(--red)}
+.chart-stack{display:flex;flex-direction:column;min-height:0;flex:1}.chart-card{height:24%;min-height:86px;border-bottom:1px solid var(--line-soft);background:#080d13;display:flex;flex-direction:column}.chart-title{height:24px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;font:9px var(--mono);color:#71859a}.chart-value{color:#cdd9e5}.chart-card canvas{flex:1;width:100%;min-height:0}
+.process-card{height:128px;padding:7px;background:#0c131b;border-top:1px solid var(--line)}.process-title{font:700 9px var(--mono);color:#73879a;margin-bottom:5px}.proc{display:grid;grid-template-columns:1fr 37px 40px;gap:5px;align-items:center;height:20px;font:8px var(--mono);color:#8294a6}.proc span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proc-load{height:3px;background:#182431}.proc-load i{display:block;height:100%;background:var(--blue)}
+
+.statusbar{height:27px;background:linear-gradient(90deg,#0e5c7e,#176793,#114b72);display:flex;align-items:center;justify-content:space-between;padding:0 8px;color:#e8f8ff;font:10px var(--mono);z-index:220;user-select:none}.status-left,.status-right{display:flex;height:100%;align-items:center}.status-item{height:100%;padding:0 8px;display:flex;align-items:center;gap:5px;cursor:pointer}.status-item:hover{background:rgba(255,255,255,.1)}.status-danger{background:rgba(255,94,102,.22)}
+
+/* Menus / overlays */
+.palette-backdrop{position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.3);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;backdrop-filter:blur(2px)}.palette-backdrop.show{display:flex}
+.palette{width:min(630px,80vw);background:#131c27;border:1px solid #3a5066;box-shadow:0 28px 80px rgba(0,0,0,.55);border-radius:7px;overflow:hidden}.palette input{width:100%;height:45px;border:0;border-bottom:1px solid var(--line);background:#0e151e;color:#e6f2fb;padding:0 14px;outline:0;font:13px var(--mono)}.command-list{max-height:330px;overflow:auto;padding:5px}.command{height:38px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:4px;color:#a7b6c6;font-size:11px;cursor:pointer}.command:hover,.command.selected{background:rgba(88,166,255,.13);color:#fff}.command-icon{width:24px;text-align:center;color:var(--cyan)}.command kbd{margin-left:auto;font:9px var(--mono);color:#52677c}
+.toast-stack{position:fixed;right:274px;bottom:38px;z-index:6000;display:flex;flex-direction:column;gap:7px;pointer-events:none}.toast{width:295px;padding:10px 12px;background:#111a24;border:1px solid #314355;border-left:3px solid var(--blue);box-shadow:var(--shadow);border-radius:5px;animation:toastIn .28s ease;color:#c9d6e3;font-size:11px}.toast.success{border-left-color:var(--green)}.toast.warn{border-left-color:var(--yellow)}.toast.error{border-left-color:var(--red)}.toast-title{font-weight:700;margin-bottom:3px}.toast-sub{color:#75889b;font-size:9px;line-height:1.4}@keyframes toastIn{from{opacity:0;transform:translateX(20px)}}
+.deploy-modal{position:fixed;inset:0;z-index:4500;display:none;place-items:center;background:rgba(2,5,8,.68);backdrop-filter:blur(4px)}.deploy-modal.show{display:grid}.deploy-card{width:min(460px,82vw);border:1px solid #30465a;background:#0e1720;box-shadow:0 35px 90px rgba(0,0,0,.65);border-radius:8px;overflow:hidden}.deploy-head{padding:13px 16px;background:#111e29;border-bottom:1px solid #2b3d4e;display:flex;justify-content:space-between;font:700 11px var(--mono)}.deploy-body{padding:18px}.deploy-ring{width:90px;height:90px;border-radius:50%;border:5px solid #1d2b38;border-top-color:var(--cyan);margin:0 auto 16px;animation:spin 1s linear infinite}.deploy-ring.done{animation:none;border-color:var(--green);position:relative}.deploy-ring.done::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;font-size:38px;color:var(--green)}@keyframes spin{to{transform:rotate(360deg)}}.deploy-stage{text-align:center;font:12px var(--mono);color:#cbd8e4}.deploy-log{margin-top:14px;height:78px;padding:8px;background:#070c11;border:1px solid #1a2936;overflow:auto;color:#72879a;font:9px/1.55 var(--mono)}.deploy-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:14px}.deploy-actions button{padding:7px 12px;border-radius:4px;border:1px solid #30465a;background:#121e29;cursor:pointer;color:#b5c5d5}.deploy-actions .accent{border-color:rgba(70,209,122,.45);color:var(--green)}
+
+/* Ecosystem */
+.eco-layer{position:fixed;inset:0;z-index:4000;pointer-events:none;overflow:hidden}.eco-layer.hunt{cursor:none}.crosshair{position:fixed;width:28px;height:28px;z-index:7000;pointer-events:none;display:none;transform:translate(-50%,-50%);filter:drop-shadow(0 0 4px rgba(82,214,232,.8))}.hunt .crosshair{display:block}.crosshair::before,.crosshair::after{content:"";position:absolute;background:var(--cyan)}.crosshair::before{width:28px;height:1px;top:13px}.crosshair::after{height:28px;width:1px;left:13px}.crosshair i{position:absolute;inset:8px;border:1px solid var(--cyan);border-radius:50%}
+.roach{position:absolute;width:var(--s);height:calc(var(--s) * .68);pointer-events:auto;will-change:transform;filter:drop-shadow(0 4px 3px rgba(0,0,0,.7));transform-origin:center;cursor:crosshair}
+.roach-body{position:absolute;left:27%;top:8%;width:46%;height:78%;border-radius:48% 48% 44% 44%;background:linear-gradient(90deg,#3c1d12 0,#86502f 24%,#3a1a10 50%,#7d4728 76%,#25100b 100%);border:1px solid rgba(15,5,2,.9);box-shadow:inset 0 0 6px #150806,0 0 2px #b87a4a}
+.roach-body::before{content:"";position:absolute;left:9%;right:9%;top:9%;height:24%;border-bottom:1px solid rgba(236,158,86,.28);border-radius:50%}.roach-body::after{content:"";position:absolute;left:49%;top:10%;bottom:8%;width:1px;background:rgba(15,6,3,.65)}
+.roach-head{position:absolute;left:35%;top:0;width:30%;height:25%;border-radius:50%;background:#2a110b;border:1px solid #130705}.roach-head::before,.roach-head::after{content:"";position:absolute;bottom:70%;width:65%;height:1px;background:#7c4b31;transform-origin:bottom}.roach-head::before{right:58%;transform:rotate(-32deg)}.roach-head::after{left:58%;transform:rotate(32deg)}
+.leg{position:absolute;width:36%;height:1px;background:#5d3522;top:40%;transform-origin:100% 50%}.leg::after{content:"";position:absolute;left:-6%;top:-1px;width:58%;height:1px;background:#4b291a;transform:rotate(28deg);transform-origin:right}.leg.r{right:1%;transform-origin:0 50%}.leg.r::after{left:48%;transform-origin:left;transform:rotate(-28deg)}.l1{left:2%;top:27%;transform:rotate(26deg)}.l2{left:0;top:48%;transform:rotate(4deg)}.l3{left:5%;top:69%;transform:rotate(-23deg)}.r1{right:2%;top:27%;transform:rotate(-26deg)}.r2{right:0;top:48%;transform:rotate(-4deg)}.r3{right:5%;top:69%;transform:rotate(23deg)}
+.roach.scuttle .l1,.roach.scuttle .r2,.roach.scuttle .l3{animation:legsA .16s infinite alternate}.roach.scuttle .r1,.roach.scuttle .l2,.roach.scuttle .r3{animation:legsB .16s infinite alternate}@keyframes legsA{to{rotate:9deg}}@keyframes legsB{to{rotate:-9deg}}
+.roach.armored .roach-body{box-shadow:inset 0 0 7px #050201,0 0 0 2px rgba(255,94,102,.35),0 0 12px rgba(255,94,102,.2)}.roach.hit{filter:brightness(2) drop-shadow(0 0 8px var(--red))}.roach.dead{pointer-events:none;animation:roachDie .36s ease forwards}@keyframes roachDie{to{transform:var(--last-transform) scale(1.35);opacity:0;filter:brightness(2.4) blur(2px)}}
+.hp{position:absolute;left:20%;right:20%;top:-8px;height:3px;background:rgba(0,0,0,.75);border-radius:3px;overflow:hidden}.hp i{display:block;height:100%;background:var(--red);transition:.15s}
+.poop{position:absolute;width:34px;height:34px;pointer-events:auto;cursor:pointer;will-change:transform}.poop-core{position:absolute;inset:4px;border-radius:45% 55% 47% 53%;background:radial-gradient(circle at 34% 26%,#9b7650,#4a301e 65%,#24150e);box-shadow:0 5px 7px rgba(0,0,0,.5),inset 0 0 4px rgba(255,255,255,.16)}.poop::after{content:"";position:absolute;left:12px;top:-2px;width:10px;height:12px;border-radius:60% 45%;background:#6e4b2f;transform:rotate(28deg)}.poop.fall{animation:poopFall 1.2s cubic-bezier(.25,.7,.4,1) forwards}@keyframes poopFall{from{transform:translateY(-10px) scale(.65) rotate(0)}to{transform:translateY(var(--fall)) scale(1) rotate(220deg)}}.poop.cleaning{animation:cleanPoop .28s ease forwards}@keyframes cleanPoop{to{transform:scale(0) rotate(90deg);opacity:0}}
+.egg{position:absolute;width:22px;height:34px;border-radius:48%;background:linear-gradient(90deg,#56311f,#b77a48,#4c2818);border:1px solid #251208;box-shadow:0 4px 8px rgba(0,0,0,.55),inset 0 0 6px rgba(255,208,149,.18);pointer-events:auto;cursor:crosshair;animation:eggPulse 1.7s infinite}.egg::after{content:"";position:absolute;left:2px;right:2px;top:50%;height:1px;background:rgba(40,15,7,.7)}@keyframes eggPulse{50%{filter:brightness(1.25);transform:scale(1.04)}}
+.heron{position:absolute;width:94px;height:58px;pointer-events:none;will-change:transform;filter:drop-shadow(0 6px 5px rgba(0,0,0,.48))}.heron svg{width:100%;height:100%;overflow:visible}.heron .wing{transform-origin:42px 27px;animation:flap .42s ease-in-out infinite alternate}@keyframes flap{from{transform:rotate(-12deg) scaleY(.86)}to{transform:rotate(16deg) scaleY(1.08)}}
+.splatter{position:absolute;width:8px;height:8px;border-radius:50%;background:#8b4626;pointer-events:none;animation:splat .55s ease-out forwards}@keyframes splat{to{transform:translate(var(--dx),var(--dy)) scale(.1);opacity:0}}
+.damage-text{position:absolute;z-index:8000;color:#ffb36f;font:700 13px var(--mono);text-shadow:0 2px 3px #000;pointer-events:none;animation:damage .7s ease-out forwards}@keyframes damage{to{transform:translateY(-24px);opacity:0}}
+.combo{position:fixed;right:284px;top:52px;z-index:8000;pointer-events:none;text-align:right;opacity:0;transform:scale(.8);transition:.2s}.combo.show{opacity:1;transform:scale(1)}.combo b{display:block;color:var(--yellow);font:900 26px var(--mono);text-shadow:0 0 15px rgba(228,184,77,.45)}.combo span{font:9px var(--mono);color:#d8e3ed;letter-spacing:.14em}
+.flash{position:fixed;inset:0;pointer-events:none;z-index:7500;background:radial-gradient(circle at var(--fx) var(--fy),rgba(82,214,232,.18),transparent 15%);animation:flash .18s ease forwards}@keyframes flash{to{opacity:0}}
+
+/* Code-completion effects */
+.fx-layer{position:fixed;inset:0;z-index:12000;pointer-events:none;overflow:hidden}
+.fx-whiteout{position:absolute;inset:0;background:#dffcff;mix-blend-mode:screen;animation:whiteout .5s ease-out forwards}@keyframes whiteout{0%{opacity:.72}100%{opacity:0}}
+.fx-ring{position:absolute;left:var(--x);top:var(--y);width:24px;height:24px;border:2px solid var(--ring,var(--cyan));border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 28px var(--ring,var(--cyan)),inset 0 0 20px rgba(255,255,255,.12);animation:fxRing .9s cubic-bezier(.1,.65,.2,1) forwards}@keyframes fxRing{to{width:min(120vw,1400px);height:min(120vw,1400px);opacity:0;border-width:1px}}
+.fx-particle{position:absolute;left:var(--x);top:var(--y);width:var(--size);height:var(--size);background:var(--c);box-shadow:0 0 10px var(--c);transform:translate(-50%,-50%) rotate(var(--r));animation:fxParticle var(--d) cubic-bezier(.12,.7,.18,1) forwards}@keyframes fxParticle{to{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) rotate(calc(var(--r) + 440deg)) scale(.1);opacity:0}}
+.fx-beam{position:absolute;left:50%;top:50%;width:3px;height:62vh;background:linear-gradient(transparent,var(--c),#fff,var(--c),transparent);transform-origin:50% 0;transform:rotate(var(--r)) translateY(-8%);filter:drop-shadow(0 0 10px var(--c));animation:beamOut .8s ease-out forwards}@keyframes beamOut{from{opacity:0;scale:1 .1}18%{opacity:1}to{opacity:0;scale:1 1.4}}
+.fx-rain{position:absolute;top:-35vh;left:var(--x);color:var(--c);font:700 var(--fs) var(--mono);line-height:1;text-shadow:0 0 9px currentColor;writing-mode:vertical-rl;animation:rainDrop var(--d) linear forwards;opacity:.75}@keyframes rainDrop{to{transform:translateY(155vh);opacity:0}}
+.fx-glitch-bar{position:absolute;left:0;right:0;top:var(--y);height:var(--h);background:linear-gradient(90deg,transparent,var(--c),rgba(255,255,255,.85),var(--c),transparent);mix-blend-mode:screen;animation:glitchBar .42s steps(2) forwards}@keyframes glitchBar{0%{transform:translateX(-12%);opacity:0}25%{opacity:.9}55%{transform:translateX(9%)}100%{transform:translateX(-4%);opacity:0}}
+.completion-banner{position:fixed;left:50%;top:42%;z-index:12500;pointer-events:none;min-width:min(560px,78vw);padding:18px 30px;border:1px solid rgba(82,214,232,.58);background:linear-gradient(90deg,rgba(4,12,18,.1),rgba(8,21,30,.94),rgba(4,12,18,.1));box-shadow:0 0 42px rgba(82,214,232,.22),inset 0 0 36px rgba(82,214,232,.05);text-align:center;opacity:0;transform:translate(-50%,-50%) scale(.84);clip-path:polygon(4% 0,96% 0,100% 50%,96% 100%,4% 100%,0 50%)}
+.completion-banner.show{animation:bannerIn 1.9s ease forwards}.completion-banner b{display:block;color:#efffff;font:900 clamp(20px,3vw,34px) var(--mono);letter-spacing:.16em;text-shadow:0 0 18px var(--cyan)}.completion-banner span{display:block;margin-top:7px;color:#7fe9f5;font:10px var(--mono);letter-spacing:.2em}@keyframes bannerIn{0%{opacity:0;transform:translate(-50%,-50%) scale(.7);filter:blur(8px)}12%,70%{opacity:1;transform:translate(-50%,-50%) scale(1);filter:none}100%{opacity:0;transform:translate(-50%,-50%) scale(1.08);filter:blur(2px)}}
+body.fx-glitch #app{animation:appGlitch .7s steps(2)}@keyframes appGlitch{0%,100%{transform:none;filter:none}15%{transform:translateX(-6px);filter:hue-rotate(70deg) contrast(1.45)}28%{transform:translateX(5px) skewX(-1deg)}45%{clip-path:inset(12% 0 48% 0);transform:translateX(-9px)}62%{clip-path:inset(58% 0 9% 0);transform:translateX(7px);filter:hue-rotate(-55deg)}80%{clip-path:none}}
+body.fx-overclock #app{animation:overclockApp 1.2s ease-out}@keyframes overclockApp{0%{filter:brightness(1) saturate(1)}20%{filter:brightness(1.45) saturate(1.9) contrast(1.2)}100%{filter:none}}
+body.fx-prism #app{animation:prismApp .85s ease-out}@keyframes prismApp{18%{filter:hue-rotate(120deg) saturate(2)}46%{filter:hue-rotate(250deg) saturate(1.6)}100%{filter:none}}
+
+@media(max-width:1100px){.shell{grid-template-columns:46px 205px minmax(430px,1fr) 220px}.monitor{font-size:90%}.toast-stack,.combo{right:232px}}
+
+/* Code-eater rebalance */
+.roach{transition:filter .18s ease}
+.roach.hungry{filter:drop-shadow(0 5px 4px rgba(0,0,0,.72)) drop-shadow(0 0 7px rgba(255,119,82,.32))}
+.roach.hungry .roach-head{box-shadow:0 0 7px rgba(255,112,72,.55)}
+.roach.munching{animation:roachMunch .16s steps(2) infinite!important;filter:brightness(1.18) drop-shadow(0 0 9px rgba(255,149,79,.5))}
+@keyframes roachMunch{50%{margin-left:-2px;transform:var(--roach-transform) rotate(-4deg)}}
+.editor-wrap.code-under-attack{animation:editorBiteShock .32s ease}
+@keyframes editorBiteShock{20%{box-shadow:inset 0 0 0 1px rgba(255,95,81,.8),inset 0 0 32px rgba(255,70,60,.12)}55%{transform:translateX(-2px)}80%{transform:translateX(1px)}}
+.code-bite{position:absolute;z-index:8100;width:48px;height:48px;border:2px dashed rgba(255,171,91,.9);border-radius:50%;pointer-events:none;transform:translate(-50%,-50%) scale(.25);animation:codeBiteBurst .72s cubic-bezier(.1,.8,.2,1) forwards;box-shadow:0 0 18px rgba(255,93,71,.38),inset 0 0 14px rgba(255,188,97,.22)}
+.code-bite::before,.code-bite::after{content:"";position:absolute;inset:9px;border:2px dotted rgba(255,101,75,.8);border-radius:45% 55% 48% 52%;animation:codeBiteSpin .5s linear}
+.code-bite::after{inset:17px;border-style:solid;border-color:rgba(255,224,159,.9)}
+@keyframes codeBiteBurst{55%{opacity:1;transform:translate(-50%,-50%) scale(1.15) rotate(20deg)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.65) rotate(70deg)}}
+@keyframes codeBiteSpin{to{rotate:140deg}}
+.code-crumb{position:absolute;z-index:8150;color:#ffb066;font:700 11px var(--mono);text-shadow:0 2px 4px #000;pointer-events:none;animation:crumbFly .9s ease-out forwards}
+@keyframes crumbFly{to{translate:var(--cx) var(--cy);rotate:var(--cr);opacity:0}}
+
+</style>
+</head>
+<body>
+<div class="boot-screen" id="bootScreen">
+  <div class="boot-card">
+    <div class="boot-logo">NEXUS</div>
+    <div class="boot-sub">WASTELAND OPERATIONS CONSOLE / BUILD 7.27.26</div>
+    <div class="boot-log" id="bootLog"></div>
+    <div class="boot-progress"><i id="bootProgress"></i></div>
+    <div class="boot-actions"><span>Secure enclave: TOKYO-03 · AIR-GAPPED MODE</span><button id="skipBoot">跳过启动</button></div>
+  </div>
+</div>
+
+<div class="app" id="app">
+  <header class="titlebar">
+    <div class="brand"><span class="brand-mark"></span>NEXUS</div>
+    <nav class="menus" id="menus">
+      <div class="menu">文件<div class="menu-dropdown">
+        <div class="menu-action" data-command="newFile">新建隔离脚本 <kbd>Ctrl+N</kbd></div>
+        <div class="menu-action" data-command="save">保存当前文件 <kbd>Ctrl+S</kbd></div>
+        <div class="menu-action" data-command="saveAll">保存全部 <kbd>Ctrl+K S</kbd></div>
+        <div class="menu-action" data-command="reset">恢复演示状态</div>
+      </div></div>
+      <div class="menu">编辑<div class="menu-dropdown">
+        <div class="menu-action" data-command="format">格式化文档 <kbd>Shift+Alt+F</kbd></div>
+        <div class="menu-action" data-command="palette">命令面板 <kbd>Ctrl+Shift+P</kbd></div>
+        <div class="menu-action" data-command="toggleTyping">智能手打模式（默认） <kbd>F9</kbd></div>
+      </div></div>
+      <div class="menu">运行<div class="menu-dropdown">
+        <div class="menu-action" data-command="run">构建并部署 <kbd>F5</kbd></div>
+        <div class="menu-action" data-command="scan">扫描污染源 <kbd>F8</kbd></div>
+        <div class="menu-action" data-command="hunt">切换防疫模式 <kbd>H</kbd></div>
+        <div class="menu-action" data-command="panic">紧急封锁协议</div>
+      </div></div>
+      <div class="menu">视图<div class="menu-dropdown">
+        <div class="menu-action" data-command="terminal">聚焦终端 <kbd>Ctrl+`</kbd></div>
+        <div class="menu-action" data-command="toggleMonitor">隐藏/显示监控</div>
+        <div class="menu-action" data-command="fullscreen">全屏工作区 <kbd>F11</kbd></div>
+      </div></div>
+      <div class="menu">帮助<div class="menu-dropdown"><div class="menu-action" data-command="help">显示可用命令</div><div class="menu-action" data-command="about">关于 Wasteland Edition</div></div></div>
+    </nav>
+    <div class="window-caption">nexus-core — restricted workspace</div>
+    <div class="title-actions"><div class="sys-pill"><span class="pulse-dot"></span><span id="clock">00:00:00</span></div><button class="win-btn">—</button><button class="win-btn">□</button><button class="win-btn close">×</button></div>
+  </header>
+
+  <main class="shell" id="shell">
+    <aside class="activitybar">
+      <button class="activity-btn active" title="资源管理器">▱</button><button class="activity-btn" title="搜索">⌕</button><button class="activity-btn" title="源代码管理">⑂</button><button class="activity-btn" title="运行与调试">▷</button><button class="activity-btn" title="扩展">⌗</button><div class="activity-spacer"></div><button class="activity-btn" id="soundBtn" title="音效">♪</button><button class="activity-btn" title="设置">⚙</button>
+    </aside>
+
+    <aside class="sidepanel">
+      <div class="side-title"><span>资源管理器</span><button id="newFileBtn">＋</button></div>
+      <div class="section-title" data-section="files"><span class="chev">▼</span>NEXUS-CORE</div>
+      <div class="tree" id="fileTree"></div>
+      <div class="section-title" data-section="missions"><span class="chev">▼</span>隔离任务</div>
+      <div class="mission-list" id="missionList">
+        <div class="mission" id="missionKill" style="--progress:0%"><div class="mission-name">清除变异体</div><div class="mission-meta"><span>击杀目标</span><span id="killMissionText">0 / 12</span></div></div>
+        <div class="mission" id="missionBuild" style="--progress:0%"><div class="mission-name">稳定核心构建</div><div class="mission-meta"><span>成功部署</span><span id="buildMissionText">0 / 2</span></div></div>
+        <div class="mission" id="missionClean" style="--progress:100%"><div class="mission-name">控制环境污染</div><div class="mission-meta"><span>污染值低于 30%</span><span id="cleanMissionText">稳定</span></div></div>
+      </div>
+      <div class="contam-card"><div class="contam-head"><span>环境污染指数</span><strong class="contam-value" id="contamValue">12%</strong></div><div class="meter"><i id="contamBar"></i></div><div class="contam-note" id="contamNote">空气过滤器运行正常。未检测到规模化繁殖。</div></div>
+    </aside>
+
+    <section class="workbench" id="workbench">
+      <div class="tabs" id="tabs"></div>
+      <div class="toolbar"><button class="tool-btn primary" data-command="run">▶ 构建 / 部署</button><button class="tool-btn" data-command="scan">⌁ 污染扫描</button><button class="tool-btn danger" data-command="hunt" id="huntBtn">⊕ 防疫模式</button><button class="tool-btn" data-command="toggleTyping" id="typingBtn">⌨ 默认 · 10字符/键</button><span class="breadcrumb" id="breadcrumb"></span><span class="toolbar-spacer"></span><span class="save-state" id="saveState">已保存</span></div>
+      <div class="editor-wrap" id="editorWrap"><div class="line-numbers" id="lineNumbers">1</div><textarea class="code-editor" id="editor" aria-label="代码编辑器" spellcheck="false"></textarea><div class="editor-cursor-glow" id="cursorGlow"></div><div class="typing-hud waiting" id="typingHud"><i class="typing-led"></i><strong id="typingRate">10 字符/键</strong><em id="typingHint">普通键 ×10 · 空格超频</em></div></div>
+      <div class="resizer" id="resizer"></div>
+      <div class="bottom-panel" id="bottomPanel">
+        <section class="panel"><div class="panel-tabs"><button class="panel-tab active">终端</button><button class="panel-tab">问题 <span id="problemCount">0</span></button><button class="panel-tab">输出</button><div class="panel-actions"><button class="mini-btn" id="clearTerminal">⌫</button><button class="mini-btn">⌃</button></div></div><div class="terminal" id="terminal"><div class="term-line term-ok">✓ Workspace mounted. Quarantine boundaries active.</div><div class="term-line">  输入 <span class="term-cyan">help</span> 查看控制台命令。</div><div class="term-input-row"><span class="term-prompt">operator@nexus:~$</span><input class="term-input" id="termInput" autocomplete="off" spellcheck="false"></div></div></section>
+        <section class="panel"><div class="panel-tabs"><button class="panel-tab active">NEXUS COPILOT</button><div class="panel-actions"><button class="mini-btn" id="clearChat">⌫</button></div></div><div class="chat" id="chat"><div class="bubble bot">控制台在线。我会分析构建、污染和入侵状态。可输入“扫描”“状态”“清理”“生成一只”“帮助”。<small>NEXUS COPILOT · LOCAL</small></div></div><div class="chat-compose"><input id="chatInput" placeholder="向本地 Copilot 发出指令…"><button id="sendChat">➤</button></div></section>
+      </div>
+    </section>
+
+    <aside class="monitor" id="monitor">
+      <div class="monitor-head"><span>实时遥测</span><span class="live"><i class="pulse-dot"></i>LIVE</span></div>
+      <div class="kpi-grid"><div class="kpi"><div class="kpi-label">CPU PACKAGE</div><div class="kpi-value"><span id="cpuValue">12</span><em>%</em></div><div class="kpi-delta" id="cpuDelta">▲ 1.4%</div></div><div class="kpi"><div class="kpi-label">GPU COMPUTE</div><div class="kpi-value"><span id="gpuValue">28</span><em>%</em></div><div class="kpi-delta" id="gpuDelta">▲ 3.1%</div></div><div class="kpi"><div class="kpi-label">MEMORY</div><div class="kpi-value"><span id="ramValue">5.8</span><em>GB</em></div><div class="kpi-delta">12.4 / 32 GB</div></div><div class="kpi"><div class="kpi-label">INFERENCE</div><div class="kpi-value"><span id="tpsValue">8</span><em>TPS</em></div><div class="kpi-delta" id="tpsDelta">LOCAL ENGINE</div></div></div>
+      <div class="chart-stack"><div class="chart-card"><div class="chart-title"><span>CPU LOAD</span><span class="chart-value" id="cpuChartVal">12%</span></div><canvas id="cpuCanvas"></canvas></div><div class="chart-card"><div class="chart-title"><span>GPU EFFICIENCY</span><span class="chart-value" id="gpuChartVal">28%</span></div><canvas id="gpuCanvas"></canvas></div><div class="chart-card"><div class="chart-title"><span>RAM PRESSURE</span><span class="chart-value" id="ramChartVal">5.8 GB</span></div><canvas id="ramCanvas"></canvas></div><div class="chart-card"><div class="chart-title"><span>TOKEN THROUGHPUT</span><span class="chart-value" id="tpsChartVal">8 TPS</span></div><canvas id="tpsCanvas"></canvas></div></div>
+      <div class="process-card"><div class="process-title">ACTIVE PROCESSES</div><div class="proc"><span>nexus-language-server</span><span>PID 28</span><span class="proc-load"><i id="proc1" style="width:22%"></i></span></div><div class="proc"><span>quarantine-watchdog</span><span>PID 41</span><span class="proc-load"><i id="proc2" style="width:12%"></i></span></div><div class="proc"><span>local-inference</span><span>PID 74</span><span class="proc-load"><i id="proc3" style="width:48%"></i></span></div><div class="proc"><span>biohazard-renderer</span><span>PID 99</span><span class="proc-load"><i id="proc4" style="width:9%"></i></span></div></div>
+    </aside>
+  </main>
+
+  <footer class="statusbar"><div class="status-left"><div class="status-item">⑂ main*</div><div class="status-item">⊗ <span id="statusErrors">0</span></div><div class="status-item">△ <span id="statusWarnings">1</span></div><div class="status-item" id="quarantineStatus">◉ QUARANTINE STABLE</div></div><div class="status-right"><div class="status-item" id="scoreStatus">SCORE 00000</div><div class="status-item">Ln <span id="lineStatus">1</span>, Col <span id="colStatus">1</span></div><div class="status-item" id="langStatus">TypeScript</div><div class="status-item">UTF-8</div><div class="status-item">LF</div><div class="status-item">{} Prettier</div></div></footer>
+</div>
+
+<div class="palette-backdrop" id="paletteBackdrop"><div class="palette"><input id="paletteInput" placeholder="> 输入命令…"><div class="command-list" id="commandList"></div></div></div>
+<div class="deploy-modal" id="deployModal"><div class="deploy-card"><div class="deploy-head"><span>DEPLOYMENT PIPELINE</span><span id="deployCode">NX-7A</span></div><div class="deploy-body"><div class="deploy-ring" id="deployRing"></div><div class="deploy-stage" id="deployStage">正在准备隔离构建…</div><div class="deploy-log" id="deployLog"></div><div class="deploy-actions"><button id="deployClose">后台运行</button><button class="accent" id="deployAction" disabled>等待完成</button></div></div></div></div>
+<div class="toast-stack" id="toastStack"></div>
+<div class="combo" id="combo"><b id="comboValue">x2</b><span>EXTERMINATION COMBO</span></div>
+<div class="eco-layer" id="ecoLayer"><div class="crosshair" id="crosshair"><i></i></div></div>
+<div class="fx-layer" id="fxLayer"></div>
+<div class="completion-banner" id="completionBanner"><b id="completionTitle">CODE ONLINE</b><span id="completionSub">RUNTIME PATCH ACCEPTED</span></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, root=document) => root.querySelector(s);
+const $$ = (s, root=document) => [...root.querySelectorAll(s)];
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+const rand=(a,b)=>a+Math.random()*(b-a);
+const choose=a=>a[Math.floor(Math.random()*a.length)];
+const escapeHTML=s=>s.replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const storage={
+  get(key){try{return localStorage.getItem(key)}catch{return null}},
+  set(key,value){try{localStorage.setItem(key,value)}catch{}},
+  remove(key){try{localStorage.removeItem(key)}catch{}}
+};
+
+const defaultFiles={
+  'core_engine.ts':{lang:'TypeScript',icon:'TS',cls:'ts',code:`// NEXUS Core Engine / quarantine runtime\nimport { Reactor, Telemetry } from '@nexus/core';\nimport { BiohazardFence } from './quarantine';\n\nexport class Engine {\n    private telemetry = new Telemetry({ sampleRate: 250 });\n    private fence = new BiohazardFence('TOKYO-03');\n\n    public async boot(): Promise<void> {\n        await this.telemetry.connect();\n        this.fence.arm({ pressure: 0.82, autoSeal: true });\n        console.info('[NEXUS] reactor online');\n    }\n\n    public async deploy(payload: Uint8Array) {\n        const signature = await crypto.subtle.digest('SHA-256', payload);\n        return Reactor.commit(signature, { isolated: true });\n    }\n}\n`},
+  'quarantine.rs':{lang:'Rust',icon:'RS',cls:'rs',code:`// Zero-copy quarantine boundary\nuse nexus_runtime::{Fence, HazardLevel, Result};\n\npub fn establish_boundary(sector: &str) -> Result<Fence> {\n    let mut fence = Fence::new(sector);\n    fence.set_level(HazardLevel::Elevated);\n    fence.enable_auto_purge(true);\n    fence.arm()?;\n    Ok(fence)\n}\n\npub fn purge_contaminant(id: u64) -> Result<()> {\n    nexus_runtime::purge(id, 3)?;\n    Ok(())\n}\n`},
+  'telemetry.js':{lang:'JavaScript',icon:'JS',cls:'jsi',code:`export const sampleTelemetry = (state) => ({\n  cpu: state.compiling ? 72 + Math.random() * 18 : 12 + Math.random() * 16,\n  gpu: state.huntMode ? 55 + Math.random() * 24 : 24 + Math.random() * 18,\n  memory: 5.4 + state.entities * 0.035,\n  inference: state.copilotBusy ? 62 + Math.random() * 28 : 6 + Math.random() * 5,\n  contamination: state.contamination\n});\n`},
+  'manifest.json':{lang:'JSON',icon:'{}',cls:'json',code:`{\n  "workspace": "nexus-core",\n  "sector": "TOKYO-03",\n  "runtime": "air-gapped",\n  "quarantine": {\n    "autoSeal": true,\n    "maximumEntities": 7,\n    "pollutionThreshold": 70\n  },\n  "copilot": "local-inference"\n}\n`},
+  'README.md':{lang:'Markdown',icon:'M↓',cls:'md',code:`# NEXUS Wasteland Operations Console\n\nThis workspace is a simulated containment IDE.\n\n## Operator protocol\n1. Compile the core runtime.\n2. Keep contamination below 30%.\n3. Eliminate visible biohazards.\n4. Use the terminal or Copilot to inspect the sector.\n\n> Warning: clicking an egg case before incubation prevents a hatch event.\n`}
+};
+
+const state={
+  files:JSON.parse(storage.get('nexus-files')||'null')||structuredClone(defaultFiles),
+  open:['core_engine.ts','quarantine.rs'], current:'core_engine.ts', dirty:new Set(),
+  kills:0, builds:0, score:0, contamination:12, huntMode:false, compiling:false,copilotBusy:false,
+  audio:false, typing:true, typingInProgress:false, typingAbort:false, typingRuns:0, typingQueue:0, typingStreamByFile:{}, typingOverdriveUntil:0, combo:0, comboTimer:null, entities:[], eggs:[], poops:[], maxRoaches:7, codeBackups:[], codeLost:0, lastBiteNotice:0,
+  telemetry:{cpu:12,gpu:28,ram:5.8,tps:8}, panelHeight:205, monitorVisible:true
+};
+
+/* Boot */
+const bootLines=[
+  ['Mounting encrypted workspace /dev/nx0…','ok'],
+  ['Verifying reactor signatures…','ok'],
+  ['Starting local inference engine…','ok'],
+  ['Scanning viewport for biological contamination…','warn'],
+  ['2 dormant signatures detected. Quarantine rules loaded.','warn'],
+  ['NEXUS operator shell ready.','ok']
+];
+let bootIndex=0,bootFinished=false;
+function finishBoot(){ if(bootFinished)return;bootFinished=true;$('#bootScreen').classList.add('hidden'); setTimeout(()=>{toast('系统就绪','智能手打已默认开启：普通键生成 10 个语法字符，空格进入全屏超频。','success');setTypingUI(false,true);$('#editor').focus();},350); }
+function bootStep(){
+  if(bootIndex>=bootLines.length){$('#bootProgress').style.width='100%';setTimeout(finishBoot,450);return;}
+  const [text,cls]=bootLines[bootIndex++];
+  $('#bootLog').insertAdjacentHTML('beforeend',`<div class="boot-line ${cls}">[${new Date().toLocaleTimeString('zh-CN',{hour12:false})}] ${text}</div>`);
+  $('#bootProgress').style.width=`${Math.round(bootIndex/bootLines.length*100)}%`;
+  setTimeout(bootStep,240+Math.random()*270);
+}
+$('#skipBoot').onclick=finishBoot;setTimeout(bootStep,280);
+
+/* UI Files */
+function fileIcon(f){const x=state.files[f];return `<span class="file-icon ${x.cls}">${x.icon}</span>`}
+function renderFiles(){
+  $('#fileTree').innerHTML=`<div class="folder-row">⌄ <span>src</span></div>`+Object.keys(state.files).map(f=>`<div class="file-row ${f===state.current?'active':''} ${state.dirty.has(f)?'dirty':''}" data-file="${f}">${fileIcon(f)}<span>${f}</span></div>`).join('');
+  $('#tabs').innerHTML=state.open.map(f=>`<div class="tab ${f===state.current?'active':''}" data-file="${f}">${fileIcon(f)}<span style="overflow:hidden;text-overflow:ellipsis">${f}</span>${state.dirty.has(f)?'<span class="dirty-dot">●</span>':'<span class="close-tab">×</span>'}</div>`).join('');
+  $$('.file-row').forEach(el=>el.onclick=()=>openFile(el.dataset.file));
+  $$('.tab').forEach(el=>el.onclick=e=>{if(e.target.classList.contains('close-tab'))closeTab(el.dataset.file);else openFile(el.dataset.file)});
+}
+function openFile(name){if(!state.open.includes(name))state.open.push(name);state.current=name;loadEditor();renderFiles();}
+function closeTab(name){if(state.open.length===1)return toast('无法关闭','至少需要保留一个活动文件。','warn');const i=state.open.indexOf(name);state.open.splice(i,1);if(state.current===name)state.current=state.open[Math.max(0,i-1)];loadEditor();renderFiles();}
+function loadEditor(){
+  const f=state.files[state.current];$('#editor').value=f.code;$('#langStatus').textContent=f.lang;$('#breadcrumb').textContent=`nexus-core › src › ${state.current}`;updateLines();updateCursorStatus();
+}
+function updateLines(){const count=$('#editor').value.split('\n').length;$('#lineNumbers').textContent=Array.from({length:count},(_,i)=>i+1).join('\n');}
+function updateCursorStatus(){const e=$('#editor'),before=e.value.slice(0,e.selectionStart),lines=before.split('\n');$('#lineStatus').textContent=lines.length;$('#colStatus').textContent=lines.at(-1).length+1;}
+$('#editor').addEventListener('input',()=>{state.files[state.current].code=$('#editor').value;state.dirty.add(state.current);$('#saveState').textContent='未保存';updateLines();updateCursorStatus();renderFiles();});
+$('#editor').addEventListener('scroll',()=>{$('#lineNumbers').scrollTop=$('#editor').scrollTop;$('#lineNumbers').scrollLeft=$('#editor').scrollLeft});
+$('#editor').addEventListener('click',updateCursorStatus);$('#editor').addEventListener('keyup',updateCursorStatus);
+$('#editor').addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const el=e.target,s=el.selectionStart,end=el.selectionEnd;el.setRangeText('    ',s,end,'end');el.dispatchEvent(new Event('input'));}});
+$('#editorWrap').addEventListener('mousemove',e=>{const r=e.currentTarget.getBoundingClientRect();$('#cursorGlow').style.left=(e.clientX-r.left)+'px';$('#cursorGlow').style.top=(e.clientY-r.top)+'px'});
+function save(all=false){const names=all?[...state.dirty]:[state.current];names.forEach(n=>state.dirty.delete(n));storage.set('nexus-files',JSON.stringify(state.files));$('#saveState').textContent='已保存';renderFiles();beep(520,.04,'sine',.025);toast('文件已保存',all?`已写入 ${names.length} 个文件。`:state.current,'success');}
+function newFile(){let i=1,name;do{name=`containment_${i++}.ts`}while(state.files[name]);state.files[name]={lang:'TypeScript',icon:'TS',cls:'ts',code:`// New containment script\nexport function contain(): boolean {\n    return true;\n}\n`};state.open.push(name);state.current=name;state.dirty.add(name);loadEditor();renderFiles();$('#editor').focus();}
+function formatDocument(){let code=$('#editor').value;code=code.replace(/\t/g,'    ').replace(/[ \t]+$/gm,'').replace(/\n{3,}/g,'\n\n');$('#editor').value=code;$('#editor').dispatchEvent(new Event('input'));toast('格式化完成','已规范缩进、尾随空格和空行。','success');}
+
+/* Menus */
+$$('.menu').forEach(m=>m.addEventListener('click',e=>{e.stopPropagation();$$('.menu').filter(x=>x!==m).forEach(x=>x.classList.remove('open'));m.classList.toggle('open')}));document.addEventListener('click',()=>$$('.menu').forEach(x=>x.classList.remove('open')));
+$$('[data-command]').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();runCommand(el.dataset.command);$$('.menu').forEach(x=>x.classList.remove('open'))}));
+$$('.section-title').forEach(s=>s.onclick=()=>{s.classList.toggle('collapsed');const target=s.dataset.section==='files'?$('#fileTree'):$('#missionList');target.classList.toggle('hidden')});
+
+/* Terminal */
+function term(text,cls=''){const input=$('.term-input-row');input.insertAdjacentHTML('beforebegin',`<div class="term-line ${cls}">${escapeHTML(text)}</div>`);$('#terminal').scrollTop=$('#terminal').scrollHeight;}
+function runTerminal(raw){const cmd=raw.trim();if(!cmd)return;term(`operator@nexus:~$ ${cmd}`,'term-cyan');const [head,...args]=cmd.toLowerCase().split(/\s+/);switch(head){
+ case'help':term('commands: status | scan | run | hunt | purge | spawn [n] | restore | clear | ls | cat <file> | save | panic');break;
+ case'status':term(`sector=TOKYO-03 contamination=${Math.round(state.contamination)}% entities=${activeCount()} kills=${state.kills} builds=${state.builds}`);break;
+ case'scan':scan();break;case'run':build();break;case'hunt':toggleHunt();break;case'purge':purgePoops();break;
+ case'spawn':{const n=clamp(parseInt(args[0]||'1',10)||1,1,8);for(let i=0;i<n;i++)spawnRoach();term(`spawned ${n} simulated signature(s)`,'term-warn');break;}
+ case'clear':clearTerminal();break;case'ls':term(Object.keys(state.files).join('   '));break;
+ case'cat':{const f=args[0];term(state.files[f]?.code||`cat: ${f||'<file>'}: not found`,state.files[f]?'':'term-error');break;}
+ case'save':save(true);break;case'restore':restoreLastBite();break;case'panic':panic();break;default:term(`nexus-shell: command not found: ${head}`,'term-error');beep(180,.08,'square',.025);
+ }}
+$('#termInput').addEventListener('keydown',e=>{if(e.key==='Enter'){const v=e.target.value;e.target.value='';runTerminal(v)}});
+function clearTerminal(){$$('#terminal .term-line').forEach(x=>x.remove());term('terminal buffer cleared');}
+$('#clearTerminal').onclick=clearTerminal;
+
+/* Chat */
+function chatBubble(text,who='bot'){const div=document.createElement('div');div.className=`bubble ${who}`;div.innerHTML=`${escapeHTML(text)}<small>${who==='bot'?'NEXUS COPILOT · LOCAL':'OPERATOR · NOW'}</small>`;$('#chat').appendChild(div);$('#chat').scrollTop=$('#chat').scrollHeight;return div;}
+function sendChat(){const input=$('#chatInput'),text=input.value.trim();if(!text)return;chatBubble(text,'user');input.value='';state.copilotBusy=true;$('#tpsDelta').textContent='GENERATING';const typing=chatBubble('分析中…','bot');setTimeout(()=>{typing.remove();const t=text.toLowerCase();let reply;if(/扫描|scan/.test(t)){scan();reply=`扫描完成：当前检测到 ${activeCount()} 个移动生物信号、${state.eggs.length} 个卵鞘和 ${state.poops.length} 处污染。`;}else if(/状态|status/.test(t)){reply=`隔离区污染 ${Math.round(state.contamination)}%，CPU ${Math.round(state.telemetry.cpu)}%，累计击杀 ${state.kills}，部署 ${state.builds} 次。`;}else if(/清理|purge/.test(t)){purgePoops();reply='已调用微型清洁无人机，表面污染正在回收。';}else if(/生成|spawn|蟑螂/.test(t)){spawnRoach(undefined,undefined,rand(58,76));reply='已注入一个受控变异体，用于验证点击防疫链路。';}else if(/运行|编译|构建|run/.test(t)){build();reply='构建流水线已经启动，遥测负载将同步上升。';}else if(/帮助|help/.test(t)){reply='你可以让我：扫描污染、汇报状态、清理污渍、生成测试个体、运行构建，或开启紧急封锁。';}else{reply=choose(['已将请求写入本地推理队列。建议先扫描隔离区，再运行核心构建。','当前模型没有联网，但可以直接控制本页面的构建、扫描与防疫系统。','检测到指令语义稳定。没有发现提示注入或越权访问。']);}chatBubble(reply);state.copilotBusy=false;$('#tpsDelta').textContent='LOCAL ENGINE';},650+Math.random()*650);}
+$('#sendChat').onclick=sendChat;$('#chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat()});$('#clearChat').onclick=()=>$('#chat').innerHTML='';
+
+/* Audio */
+let audioCtx=null;function ensureAudio(){if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();}
+function beep(freq=440,d=.06,type='sine',gain=.03){if(!state.audio)return;ensureAudio();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(gain,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+d);o.connect(g).connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+d);}
+$('#soundBtn').onclick=()=>{state.audio=!state.audio;$('#soundBtn').textContent=state.audio?'♫':'♪';if(state.audio){ensureAudio();beep(620,.08);toast('音效已开启','使用 Web Audio 实时合成，不加载外部资源。','success')}else toast('音效已关闭','页面将保持静音。')};
+
+/* Telemetry */
+class Chart{
+ constructor(canvas,color,max=100){this.canvas=canvas;this.ctx=canvas.getContext('2d');this.color=color;this.max=max;this.data=Array(48).fill(0).map(()=>rand(10,30));}
+ push(v){this.data.shift();this.data.push(v);this.draw()}
+ draw(){const c=this.canvas,r=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1,w=Math.max(2,r.width),h=Math.max(2,r.height);if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}const x=this.ctx;x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);x.strokeStyle='rgba(100,125,148,.12)';x.lineWidth=1;for(let i=1;i<4;i++){const y=h*i/4;x.beginPath();x.moveTo(0,y+.5);x.lineTo(w,y+.5);x.stroke()}const grad=x.createLinearGradient(0,0,0,h);grad.addColorStop(0,this.color.replace('1)','0.25)'));grad.addColorStop(1,this.color.replace('1)','0)'));x.beginPath();this.data.forEach((v,i)=>{const px=i/(this.data.length-1)*w,py=h-clamp(v/this.max,0,1)*(h-5)-2;i?x.lineTo(px,py):x.moveTo(px,py)});x.lineTo(w,h);x.lineTo(0,h);x.closePath();x.fillStyle=grad;x.fill();x.beginPath();this.data.forEach((v,i)=>{const px=i/(this.data.length-1)*w,py=h-clamp(v/this.max,0,1)*(h-5)-2;i?x.lineTo(px,py):x.moveTo(px,py)});x.strokeStyle=this.color;x.lineWidth=1.3;x.shadowBlur=7;x.shadowColor=this.color;x.stroke();x.shadowBlur=0;}
+}
+const charts={cpu:new Chart($('#cpuCanvas'),'rgba(70,209,122,1)'),gpu:new Chart($('#gpuCanvas'),'rgba(182,149,255,1)'),ram:new Chart($('#ramCanvas'),'rgba(88,166,255,1)',16),tps:new Chart($('#tpsCanvas'),'rgba(255,138,76,1)')};
+function telemetryTick(){
+ const entityLoad=activeCount()+state.eggs.length+state.poops.length*.4;
+ const cpu=state.compiling?rand(74,96):(state.typingInProgress?rand(58,82):clamp(10+entityLoad*.55+rand(-4,8),5,88));
+ const gpu=state.huntMode?clamp(48+entityLoad*.85+rand(-5,10),12,96):(state.typingInProgress?rand(44,70):clamp(22+entityLoad*.4+rand(-5,8),5,82));
+ const ram=clamp(5.1+entityLoad*.045+(state.typingInProgress?.45:0)+rand(-.12,.16),4.8,12.8);
+ const tps=state.copilotBusy?rand(58,92):(state.typingInProgress?rand(78,99):(state.compiling?rand(22,45):rand(5,11)));state.telemetry={cpu,gpu,ram,tps};
+ $('#cpuValue').textContent=Math.round(cpu);$('#gpuValue').textContent=Math.round(gpu);$('#ramValue').textContent=ram.toFixed(1);$('#tpsValue').textContent=Math.round(tps);
+ $('#cpuChartVal').textContent=`${Math.round(cpu)}%`;$('#gpuChartVal').textContent=`${Math.round(gpu)}%`;$('#ramChartVal').textContent=`${ram.toFixed(1)} GB`;$('#tpsChartVal').textContent=`${Math.round(tps)} TPS`;
+ charts.cpu.push(cpu);charts.gpu.push(gpu);charts.ram.push(ram);charts.tps.push(tps);$('#proc1').style.width=clamp(cpu*.55,8,90)+'%';$('#proc2').style.width=clamp(state.contamination*.7,8,92)+'%';$('#proc3').style.width=clamp(tps,8,92)+'%';$('#proc4').style.width=clamp(entityLoad*3,6,92)+'%';
+}
+setInterval(telemetryTick,520);window.addEventListener('resize',()=>Object.values(charts).forEach(c=>c.draw()));
+
+/* Build */
+function build(){if(state.compiling)return toast('构建正在运行','请等待当前流水线结束。','warn');state.compiling=true;$('#deployModal').classList.add('show');$('#deployRing').className='deploy-ring';$('#deployStage').textContent='正在准备隔离构建…';$('#deployLog').innerHTML='';$('#deployAction').disabled=true;$('#deployAction').textContent='等待完成';beep(320,.08,'sawtooth',.02);const stages=[['Resolving workspace graph…',450],['Compiling TypeScript modules…',780],['Linking Rust quarantine boundary…',800],['Running 18 integrity checks…',700],['Signing isolated deployment…',620]];let i=0;function next(){if(i>=stages.length){state.compiling=false;state.builds++;state.score+=650;$('#deployRing').classList.add('done');$('#deployStage').textContent='部署成功 · 核心运行稳定';$('#deployAction').disabled=false;$('#deployAction').textContent='完成';$('#deployLog').insertAdjacentHTML('beforeend','<div style="color:var(--green)">✓ DEPLOYMENT ACCEPTED / sector TOKYO-03</div>');term('BUILD SUCCESSFUL — signed artifact nx-core.7a','term-ok');toast('部署成功',`隔离构建 #${state.builds} 已签名并投入运行。`,'success');beep(660,.07);setTimeout(()=>beep(880,.12),80);updateMissions();updateStatus();return;}const [name,time]=stages[i++];$('#deployStage').textContent=name;$('#deployLog').insertAdjacentHTML('beforeend',`<div>> ${name}</div>`);$('#deployLog').scrollTop=9999;term(`> ${name}`);setTimeout(next,time)}next();}
+$('#deployClose').onclick=()=>$('#deployModal').classList.remove('show');$('#deployAction').onclick=()=>$('#deployModal').classList.remove('show');
+
+/* Ecosystem */
+const eco=$('#ecoLayer'),cross=$('#crosshair');let ecoRect={w:innerWidth,h:innerHeight};window.addEventListener('resize',()=>ecoRect={w:innerWidth,h:innerHeight});
+eco.addEventListener('mousemove',e=>{cross.style.left=e.clientX+'px';cross.style.top=e.clientY+'px'});
+function editorAttackRect(){
+ const r=$('#editorWrap').getBoundingClientRect();
+ return {left:r.left+54,right:r.right-12,top:r.top+8,bottom:r.bottom-10,width:Math.max(1,r.width-66),height:Math.max(1,r.height-18)};
+}
+function makeCodeCrumbs(x,y,fragment){
+ const chars=(fragment||'{};').replace(/\s/g,'·').slice(0,5).split('');
+ chars.forEach((ch,i)=>{const c=document.createElement('i');c.className='code-crumb';c.textContent=ch;c.style.left=(x+rand(-7,7))+'px';c.style.top=(y+rand(-5,5))+'px';c.style.setProperty('--cx',rand(-38,38)+'px');c.style.setProperty('--cy',rand(-46,24)+'px');c.style.setProperty('--cr',rand(-120,120)+'deg');eco.appendChild(c);setTimeout(()=>c.remove(),950+i*20)});
+}
+function biteCode(roach){
+ const area=editorAttackRect(),cx=roach.x+roach.size*.5,cy=roach.y+roach.size*.34;
+ if(cx<area.left||cx>area.right||cy<area.top||cy>area.bottom)return false;
+ const editor=$('#editor'),code=editor.value;if(!code.trim())return false;
+ const style=getComputedStyle(editor),lineHeight=parseFloat(style.lineHeight)||19;
+ const lines=code.split('\n'),lineIndex=clamp(Math.floor((cy-area.top+editor.scrollTop-5)/lineHeight),0,lines.length-1);
+ const line=lines[lineIndex];if(!line||!line.trim())return false;
+ const lineStart=lines.slice(0,lineIndex).reduce((n,s)=>n+s.length+1,0);
+ let local=clamp(Math.floor(((cx-area.left)/area.width)*Math.max(1,line.length)),0,Math.max(0,line.length-1));
+ if(/\s/.test(line[local]||'')){let found=-1;for(let d=1;d<Math.max(line.length,12);d++){if(local-d>=0&&!/\s/.test(line[local-d])){found=local-d;break}if(local+d<line.length&&!/\s/.test(line[local+d])){found=local+d;break}}if(found>=0)local=found}
+ let left=local,right=local+1;
+ const isWord=/[A-Za-z0-9_$]/.test(line[local]||'');
+ if(isWord){while(left>0&&/[A-Za-z0-9_$]/.test(line[left-1]))left--;while(right<line.length&&/[A-Za-z0-9_$]/.test(line[right]))right++}
+ const maxBite=roach.armored?7:5;
+ if(right-left>maxBite){left=clamp(local-Math.floor(maxBite/2),0,line.length-1);right=Math.min(line.length,left+maxBite)}
+ if(right<=left)return false;
+ const absStart=lineStart+left,absEnd=lineStart+right,fragment=code.slice(absStart,absEnd);
+ state.codeBackups.push({file:state.current,code,cursor:editor.selectionStart,fragment});
+ if(state.codeBackups.length>8)state.codeBackups.shift();
+ const selStart=editor.selectionStart,selEnd=editor.selectionEnd;
+ editor.value=code.slice(0,absStart)+code.slice(absEnd);
+ editor.selectionStart=Math.min(selStart,editor.value.length);editor.selectionEnd=Math.min(selEnd,editor.value.length);
+ editor.dispatchEvent(new Event('input'));
+ state.codeLost+=fragment.length;state.contamination=clamp(state.contamination+2.2,0,100);
+ $('#editorWrap').classList.remove('code-under-attack');void $('#editorWrap').offsetWidth;$('#editorWrap').classList.add('code-under-attack');
+ setTimeout(()=>$('#editorWrap').classList.remove('code-under-attack'),360);
+ const fx=document.createElement('div');fx.className='code-bite';fx.style.left=cx+'px';fx.style.top=cy+'px';eco.appendChild(fx);setTimeout(()=>fx.remove(),760);
+ makeCodeCrumbs(cx,cy,fragment);showDamage(cx,cy,`CODE -${fragment.length}`);
+ roach.el.classList.add('munching');setTimeout(()=>roach.el.classList.remove('munching'),620);
+ term(`BIOHAZARD: entity consumed "${fragment.replace(/\n/g,'↵')}" from ${state.current}:${lineIndex+1}`,'term-error');
+ if(performance.now()-state.lastBiteNotice>5500){state.lastBiteNotice=performance.now();toast('代码正在被啃食',`第 ${lineIndex+1} 行损失 ${fragment.length} 个字符。运行 restore 可恢复。`,'error');alarm()}
+ beep(96,.1,'sawtooth',.035);updateContamination();updateStatus();return true;
+}
+function restoreLastBite(){
+ const snap=state.codeBackups.pop();if(!snap){term('restore: no code-bite snapshot available','term-warn');return toast('没有可恢复内容','最近没有检测到代码啃食。','warn')}
+ state.files[snap.file].code=snap.code;state.dirty.add(snap.file);
+ if(state.current===snap.file)loadEditor();
+ state.codeLost=Math.max(0,state.codeLost-(snap.fragment?.length||0));renderFiles();updateStatus();
+ term(`restore: recovered ${snap.fragment?.length||0} character(s) in ${snap.file}`,'term-ok');toast('代码已恢复',`${snap.file} 已回滚至啃食前快照。`,'success');beep(520,.08,'sine',.025);
+}
+class Roach{
+ constructor(x=rand(75,ecoRect.w-115),y=rand(70,ecoRect.h-105),size=rand(58,78),armored=Math.random()<.17){
+  this.x=x;this.y=y;this.size=size;this.armored=armored;this.hp=armored?4:(size>70?3:2);this.maxHp=this.hp;this.dead=false;
+  this.angle=rand(0,Math.PI*2);this.speed=rand(.16,.42);this.vx=Math.cos(this.angle)*this.speed;this.vy=Math.sin(this.angle)*this.speed;
+  this.turn=rand(-.009,.009);this.pause=0;this.hungry=Math.random()<.36;this.hungerAt=performance.now()+rand(5500,12500);
+  this.target=null;this.nextBiteAt=performance.now()+rand(4500,9000);
+  this.el=document.createElement('div');this.el.className=`roach scuttle${armored?' armored':''}${this.hungry?' hungry':''}`;
+  this.el.style.setProperty('--s',size+'px');
+  this.el.innerHTML=`<div class="hp"><i></i></div><span class="leg l1"></span><span class="leg l2"></span><span class="leg l3"></span><span class="leg r r1"></span><span class="leg r r2"></span><span class="leg r r3"></span><div class="roach-head"></div><div class="roach-body"></div>`;
+  this.el.addEventListener('pointerdown',e=>{e.stopPropagation();this.hit(e.clientX,e.clientY)});eco.appendChild(this.el);state.entities.push(this);this.render();
+ }
+ hit(cx,cy){if(this.dead)return;this.hp--;this.el.classList.add('hit');setTimeout(()=>this.el.classList.remove('hit'),80);showDamage(cx,cy,this.hp?'-1':'PURGED');flashAt(cx,cy);beep(this.hp?220:120,.045,'square',.025);if(this.hp<=0)this.die();else{this.vx*=-2.1;this.vy*=-2.1;this.target=null;this.el.querySelector('.hp i').style.width=`${this.hp/this.maxHp*100}%`;}}
+ die(){if(this.dead)return;this.dead=true;this.el.style.setProperty('--last-transform',this.el.style.transform);this.el.classList.add('dead');splatter(this.x+this.size/2,this.y+this.size/3,11);state.kills++;state.score+=160+state.combo*45+(this.armored?240:0);state.combo++;clearTimeout(state.comboTimer);showCombo();state.comboTimer=setTimeout(()=>{state.combo=0;$('#combo').classList.remove('show')},1900);state.contamination=clamp(state.contamination-2.4,0,100);if(this.size>68&&Math.random()<.22)setTimeout(()=>spawnEgg(this.x,this.y),360);setTimeout(()=>this.remove(),380);updateMissions();updateContamination();updateStatus();}
+ remove(){this.el.remove();this.dead=true;}
+ chooseCodeTarget(){const a=editorAttackRect();this.target={x:rand(a.left+45,a.right-35),y:rand(a.top+35,a.bottom-35)};}
+ update(){
+  if(this.dead)return;const now=performance.now();
+  if(!this.hungry&&now>this.hungerAt&&Math.random()<.018){this.hungry=true;this.el.classList.add('hungry');this.chooseCodeTarget()}
+  if(this.pause>0){this.pause--;return}
+  if(this.hungry){
+   if(!this.target)this.chooseCodeTarget();
+   const cx=this.x+this.size/2,cy=this.y+this.size/3,dx=this.target.x-cx,dy=this.target.y-cy,dist=Math.hypot(dx,dy)||1;
+   const desiredX=dx/dist*this.speed,desiredY=dy/dist*this.speed;
+   this.vx=this.vx*.94+desiredX*.06;this.vy=this.vy*.94+desiredY*.06;
+   if(dist<70&&now>this.nextBiteAt&&biteCode(this)){
+    this.hungry=false;this.el.classList.remove('hungry');this.target=null;this.hungerAt=now+rand(9000,18000);this.nextBiteAt=now+rand(9000,15000);
+    this.vx*= -1.7;this.vy*= -1.7;this.pause=Math.floor(rand(20,48));
+   }
+  }else{
+   if(Math.random()<.0035){this.pause=Math.floor(rand(30,105));this.el.classList.remove('scuttle');setTimeout(()=>!this.dead&&this.el.classList.add('scuttle'),this.pause*16)}
+   if(Math.random()<.006)this.turn=rand(-.022,.022);
+   const a=Math.atan2(this.vy,this.vx)+this.turn,sp=clamp(Math.hypot(this.vx,this.vy),.12,.72);
+   this.vx=Math.cos(a)*sp;this.vy=Math.sin(a)*sp;
+  }
+  this.x+=this.vx;this.y+=this.vy;const margin=10;
+  if(this.x<margin){this.x=margin;this.vx=Math.abs(this.vx);this.target=null}
+  if(this.x>ecoRect.w-this.size-margin){this.x=ecoRect.w-this.size-margin;this.vx=-Math.abs(this.vx);this.target=null}
+  if(this.y<45){this.y=45;this.vy=Math.abs(this.vy);this.target=null}
+  if(this.y>ecoRect.h-this.size-28){this.y=ecoRect.h-this.size-28;this.vy=-Math.abs(this.vy);this.target=null}
+  this.render();
+ }
+ render(){const deg=Math.atan2(this.vy,this.vx)*180/Math.PI+90;const tr=`translate3d(${this.x}px,${this.y}px,0) rotate(${deg}deg)`;this.el.style.setProperty('--roach-transform',tr);this.el.style.transform=tr;}
+}
+function activeCount(){return state.entities.filter(r=>!r.dead).length}
+function spawnRoach(x,y,size,armored){if(activeCount()>=state.maxRoaches)return;new Roach(x,y,size,armored);updateContamination();}
+function spawnEgg(x,y){const el=document.createElement('div');el.className='egg';el.style.left=x+'px';el.style.top=y+'px';eco.appendChild(el);const obj={el,x,y,timer:null};state.eggs.push(obj);el.onpointerdown=e=>{e.stopPropagation();destroyEgg(obj,e.clientX,e.clientY)};obj.timer=setTimeout(()=>hatchEgg(obj),rand(8500,13500));updateContamination();toast('检测到卵鞘','在孵化完成前点击清除。','warn');}
+function destroyEgg(obj,x,y){clearTimeout(obj.timer);obj.el.remove();state.eggs=state.eggs.filter(e=>e!==obj);state.score+=180;state.contamination=clamp(state.contamination-2.5,0,100);splatter(x,y,5);beep(310,.06,'square',.02);updateContamination();updateStatus();}
+function hatchEgg(obj){if(!obj.el.isConnected)return;obj.el.remove();state.eggs=state.eggs.filter(e=>e!==obj);for(let i=0;i<Math.floor(rand(1,3));i++)spawnRoach(obj.x+rand(-18,18),obj.y+rand(-12,12),rand(46,56),false);state.contamination=clamp(state.contamination+6,0,100);toast('卵鞘已孵化','一只大型幼体进入工作区。','error');alarm();updateContamination();}
+function spawnPoop(x,y){const el=document.createElement('div');el.className='poop fall';el.innerHTML='<i class="poop-core"></i>';el.style.left=x+'px';el.style.top=y+'px';const fall=clamp(ecoRect.h-y-rand(50,120),80,ecoRect.h);el.style.setProperty('--fall',fall+'px');eco.appendChild(el);const obj={el,x,y:y+fall};state.poops.push(obj);setTimeout(()=>{el.classList.remove('fall');el.style.transform=`translateY(${fall}px)`},1200);el.onpointerdown=e=>{e.stopPropagation();cleanPoop(obj)};state.contamination=clamp(state.contamination+4.5,0,100);updateContamination();}
+function cleanPoop(obj){obj.el.classList.add('cleaning');setTimeout(()=>obj.el.remove(),260);state.poops=state.poops.filter(p=>p!==obj);state.contamination=clamp(state.contamination-4.5,0,100);state.score+=70;beep(480,.05,'sine',.018);updateContamination();updateStatus();}
+function purgePoops(){const count=state.poops.length;if(!count){term('purge: no surface contamination found','term-ok');return toast('无需清理','当前没有可见表面污染。')}[...state.poops].forEach((p,i)=>setTimeout(()=>cleanPoop(p),i*90));term(`purge scheduled for ${count} contaminant(s)`,'term-ok');toast('清洁无人机已启动',`正在回收 ${count} 处污染。`,'success');}
+function spawnHeron(){const el=document.createElement('div');el.className='heron';el.innerHTML=`<svg viewBox="0 0 100 60" aria-hidden="true"><g fill="#788998" stroke="#27333e" stroke-width="1"><path class="wing" d="M43 28 C22 4 8 10 2 16 C18 17 28 29 39 36 Z"/><path class="wing" d="M46 28 C64 3 83 8 96 17 C75 18 66 29 51 36 Z"/><path d="M32 27 C42 19 60 20 69 29 C60 40 43 43 31 34 Z"/><path d="M65 28 C73 20 81 18 86 21 L74 29 C79 32 79 35 74 36 Z"/><circle cx="78" cy="24" r="1.4" fill="#ffb84c" stroke="none"/></g><path d="M34 35 L27 49 M43 39 L40 53" stroke="#9a7655" stroke-width="1.5"/></svg>`;eco.appendChild(el);const right=Math.random()>.5,startX=right?-110:ecoRect.w+110,endX=right?ecoRect.w+120:-120,y=rand(55,ecoRect.h*.44),duration=rand(4300,5700);el.style.transform=`translate(${startX}px,${y}px) ${right?'':'scaleX(-1)'}`;const start=performance.now();let dropped=false,hunted=false;function frame(now){const t=clamp((now-start)/duration,0,1),x=startX+(endX-startX)*t,yy=y+Math.sin(t*Math.PI*2)*28;el.style.transform=`translate(${x}px,${yy}px) ${right?'':'scaleX(-1)'}`;if(!hunted&&t>.42&&Math.random()<.035){const victim=state.entities.find(r=>!r.dead&&Math.abs((r.x+r.size/2)-x)<120&&Math.abs((r.y+r.size/2)-yy)<180);if(victim){hunted=true;victim.die();term('wildlife-control: night heron intercepted one signature','term-ok')}}if(!dropped&&t>.55&&Math.random()<.025){dropped=true;spawnPoop(x+35,yy+32)}if(t<1)requestAnimationFrame(frame);else el.remove()}requestAnimationFrame(frame);}
+function splatter(x,y,n=7){for(let i=0;i<n;i++){const p=document.createElement('i');p.className='splatter';p.style.left=x+'px';p.style.top=y+'px';p.style.setProperty('--dx',rand(-38,38)+'px');p.style.setProperty('--dy',rand(-30,42)+'px');eco.appendChild(p);setTimeout(()=>p.remove(),600)}}
+function showDamage(x,y,text){const d=document.createElement('div');d.className='damage-text';d.textContent=text;d.style.left=x+'px';d.style.top=y+'px';eco.appendChild(d);setTimeout(()=>d.remove(),750)}
+function flashAt(x,y){const f=document.createElement('div');f.className='flash';f.style.setProperty('--fx',x+'px');f.style.setProperty('--fy',y+'px');document.body.appendChild(f);setTimeout(()=>f.remove(),220)}
+function showCombo(){$('#comboValue').textContent='x'+state.combo;$('#combo').classList.add('show')}
+function toggleHunt(force){state.huntMode=force!==undefined?force:!state.huntMode;eco.classList.toggle('hunt',state.huntMode);$('#huntBtn').classList.toggle('primary',state.huntMode);$('#huntBtn').classList.toggle('danger',!state.huntMode);$('#huntBtn').textContent=state.huntMode?'⊕ 防疫模式：开启':'⊕ 防疫模式';toast(state.huntMode?'防疫模式已开启':'防疫模式已关闭',state.huntMode?'点击变异体、卵鞘与污染物进行处理。':'光标已恢复为标准工作区模式。',state.huntMode?'warn':'');beep(state.huntMode?720:360,.05,'square',.02)}
+function alarm(){document.body.classList.add('high-alert','shake');beep(130,.18,'sawtooth',.04);setTimeout(()=>document.body.classList.remove('shake'),300);setTimeout(()=>document.body.classList.remove('high-alert'),2500)}
+function scan(){term('scanning viewport signatures…');beep(760,.05,'sine',.02);let pulses=0;const int=setInterval(()=>{beep(760+pulses*65,.025,'sine',.012);pulses++;if(pulses>4){clearInterval(int);term(`scan complete: ${activeCount()} mobile / ${state.eggs.length} eggs / ${state.poops.length} surface contaminants`,'term-ok');toast('扫描完成',`移动目标 ${activeCount()} · 卵鞘 ${state.eggs.length} · 污染物 ${state.poops.length}`,'success')}},120);}
+function panic(){toggleHunt(true);alarm();term('PANIC PROTOCOL: sealing workspace boundaries','term-error');toast('紧急封锁协议','自动生成高优先级防疫目标。','error');for(let i=0;i<3;i++)setTimeout(()=>spawnRoach(rand(120,ecoRect.w-160),rand(70,ecoRect.h-110),rand(64,82),i===0),i*260);}
+function ecoLoop(){state.entities.forEach(r=>r.update());requestAnimationFrame(ecoLoop)}requestAnimationFrame(ecoLoop);
+for(let i=0;i<2;i++)spawnRoach(undefined,undefined,rand(62,78),i===0&&Math.random()<.35);setInterval(()=>{if(activeCount()<state.maxRoaches&&Math.random()<.38)spawnRoach(undefined,ecoRect.h-rand(80,160),rand(58,80),Math.random()<.16)},18000);setInterval(spawnHeron,rand(13000,18000));setInterval(()=>{if(Math.random()<.33)spawnHeron()},18000);
+
+/* Pollution & missions */
+function updateContamination(){const natural=8+activeCount()*1.55+state.eggs.length*4.2+state.poops.length*3.4;state.contamination=clamp(Math.max(state.contamination,natural),0,100);const v=Math.round(state.contamination);$('#contamValue').textContent=v+'%';$('#contamBar').style.width=v+'%';const color=v<30?'var(--green)':v<65?'var(--yellow)':'var(--red)';$('#contamValue').style.color=color;$('#contamNote').textContent=v<30?'空气过滤器运行正常。未检测到规模化繁殖。':v<65?'污染正在累积，建议扫描并清除卵鞘。':'警告：隔离区接近失控，请执行紧急封锁。';$('#quarantineStatus').textContent=v<30?'◉ QUARANTINE STABLE':v<65?'◉ QUARANTINE DEGRADED':'◉ QUARANTINE CRITICAL';$('#quarantineStatus').classList.toggle('status-danger',v>=65);updateMissions();}
+function updateMissions(){const kp=clamp(state.kills/6*100,0,100),bp=clamp(state.builds/2*100,0,100),clean=state.contamination<30;$('#missionKill').style.setProperty('--progress',kp+'%');$('#killMissionText').textContent=`${state.kills} / 6`;$('#missionKill').classList.toggle('done',state.kills>=6);$('#missionBuild').style.setProperty('--progress',bp+'%');$('#buildMissionText').textContent=`${state.builds} / 2`;$('#missionBuild').classList.toggle('done',state.builds>=2);$('#missionClean').style.setProperty('--progress',clean?'100%':Math.max(0,100-state.contamination)+'%');$('#missionClean').classList.toggle('done',clean);$('#cleanMissionText').textContent=clean?'稳定':'超标';}
+function updateStatus(){$('#scoreStatus').textContent='SCORE '+String(state.score).padStart(5,'0');$('#statusWarnings').textContent=Math.ceil(state.contamination/30)+(state.codeBackups.length?1:0);const base=state.contamination>=65?2:state.contamination>=30?1:0;$('#problemCount').textContent=base+(state.codeBackups.length?1:0);}
+setInterval(()=>{state.contamination=clamp(state.contamination+(activeCount()*.012+state.eggs.length*.025)-.08,0,100);updateContamination();updateStatus();},1200);
+
+/* Command palette */
+const commands=[['保存当前文件','save','Ctrl+S','▣'],['保存全部文件','saveAll','Ctrl+K S','▦'],['构建并部署核心','run','F5','▷'],['扫描污染源','scan','F8','⌁'],['切换防疫模式','hunt','H','⊕'],['清洁所有表面污染','purge','','⌫'],['恢复最近被啃代码','restore','','↶'],['紧急封锁协议','panic','','⚠'],['新建隔离脚本','newFile','Ctrl+N','＋'],['格式化当前文档','format','Shift+Alt+F','{}'],['显示/隐藏遥测面板','toggleMonitor','','▥'],['开启/关闭智能手打模式','toggleTyping','F9','⌨'],['立即播放随机完成特效','completionFx','','✦'],['恢复演示状态','reset','','↻']];
+function renderCommands(q=''){const list=commands.filter(c=>c[0].toLowerCase().includes(q.toLowerCase()));$('#commandList').innerHTML=list.map((c,i)=>`<div class="command ${i===0?'selected':''}" data-command="${c[1]}"><span class="command-icon">${c[3]}</span><span>${c[0]}</span><kbd>${c[2]}</kbd></div>`).join('');$$('#commandList .command').forEach(x=>x.onclick=()=>{hidePalette();runCommand(x.dataset.command)})}
+function showPalette(){renderCommands();$('#paletteBackdrop').classList.add('show');$('#paletteInput').value='';setTimeout(()=>$('#paletteInput').focus(),0)}function hidePalette(){$('#paletteBackdrop').classList.remove('show')}
+$('#paletteBackdrop').onclick=e=>{if(e.target===$('#paletteBackdrop'))hidePalette()};$('#paletteInput').oninput=e=>renderCommands(e.target.value);$('#paletteInput').onkeydown=e=>{if(e.key==='Escape')hidePalette();if(e.key==='Enter'){const c=$('#commandList .selected')||$('#commandList .command');if(c){hidePalette();runCommand(c.dataset.command)}}};
+
+/* Resizer */
+let resizing=false;$('#resizer').onpointerdown=e=>{resizing=true;$('#resizer').classList.add('dragging');e.target.setPointerCapture(e.pointerId)};$('#resizer').onpointermove=e=>{if(!resizing)return;const r=$('#workbench').getBoundingClientRect();state.panelHeight=clamp(r.bottom-e.clientY,120,430);$('#workbench').style.gridTemplateRows=`35px 35px minmax(150px,1fr) 5px ${state.panelHeight}px`};$('#resizer').onpointerup=()=>{resizing=false;$('#resizer').classList.remove('dragging')};
+
+/* Syntax-aware keystroke generator / default: 10 characters per key */
+const syntaxWords={
+  TypeScript:{prefix:['runtime','sector','quarantine','telemetry','scanner','reactor','signal','frame','policy','channel'],verbs:['seal','commit','verify','dispatch','sample','resolve','calibrate','synchronize'],values:["'TOKYO-03'","true","false","240","0.998","performance.now()","crypto.randomUUID()"]},
+  JavaScript:{prefix:['runtime','packet','render','buffer','signal','worker','stream','frame','policy','channel'],verbs:['push','emit','commit','dispatch','sample','resolve','flush','synchronize'],values:["'isolated'","true","false","120","Date.now()","crypto.randomUUID()","navigator.hardwareConcurrency"]},
+  Rust:{prefix:['runtime','sector','quarantine','telemetry','scanner','reactor','signal','frame','policy','channel'],verbs:['seal','commit','verify','dispatch','sample','resolve','calibrate','synchronize'],values:['true','false','240','0.998','String::from("TOKYO-03")']}
+};
+function ident(seed='node'){
+  const tail=Math.random().toString(36).slice(2,6);
+  return `${seed}_${tail}`.replace(/[^a-zA-Z0-9_]/g,'_');
+}
+function makeSyntaxBlock(lang){
+  const bag=syntaxWords[lang]||syntaxWords.TypeScript;
+  const noun=choose(bag.prefix),verb=choose(bag.verbs),value=choose(bag.values),id=ident(noun),fn=ident(verb);
+  if(lang==='Rust'){
+    return choose([
+`\n\n// adaptive containment patch ${Date.now().toString(36).slice(-5)}\nfn ${fn}(state: &mut RuntimeState) -> Result<(), NexusError> {\n    let ${id} = ${value};\n    state.${verb}(${id})?;\n    telemetry::emit("${noun}", state.health());\n    Ok(())\n}\n`,
+`\n\nstruct ${id[0].toUpperCase()+id.slice(1)} {\n    sector: String,\n    stable: bool,\n}\n\nimpl ${id[0].toUpperCase()+id.slice(1)} {\n    fn ${fn}(&mut self) {\n        self.stable = ${choose(['true','false'])};\n    }\n}\n`
+    ]);
+  }
+  const type=lang==='JavaScript'?'':' : Promise<void>';
+  return choose([
+`\n\n// generated keystroke patch ${Date.now().toString(36).slice(-5)}\nconst ${id} = {\n    sector: 'TOKYO-03',\n    strategy: '${choose(['predictive','atomic','adaptive','isolated'])}',\n    sampleRate: ${choose([120,144,240,360])},\n    trace: crypto.randomUUID(),\n};\n\nasync function ${fn}(frame${lang==='TypeScript'?': FrameState':''})${type} {\n    const signal = await scanner.${verb}(frame, ${id});\n    telemetry.push({ signal, at: performance.now() });\n    if (signal.critical) quarantine.seal(signal.sector);\n}\n`,
+`\n\nclass ${id[0].toUpperCase()+id.slice(1)}Controller {\n    ${lang==='TypeScript'?'private readonly ':''}channel = new RuntimeChannel('${choose(['shared-memory','isolated-bus','local-loop'])}');\n\n    async ${fn}(packet${lang==='TypeScript'?': RuntimePacket':''}) {\n        const verdict = await policy.evaluate(packet);\n        if (verdict === 'deny') return this.channel.quarantine(packet.id);\n        return this.channel.${verb}(packet, { atomic: true });\n    }\n}\n`
+  ]);
+}
+function streamForCurrentFile(){
+  const name=state.current;
+  if(!state.typingStreamByFile[name])state.typingStreamByFile[name]={text:'',pos:0,blocks:0};
+  return state.typingStreamByFile[name];
+}
+function nextSyntaxCharacter(){
+  const stream=streamForCurrentFile();
+  if(stream.pos>=stream.text.length){
+    stream.text=makeSyntaxBlock(state.files[state.current].lang);
+    stream.pos=0;stream.blocks++;
+  }
+  const ch=stream.text[stream.pos++];
+  return {ch,blockDone:stream.pos>=stream.text.length,blockNo:stream.blocks};
+}
+function setTypingUI(active,waiting=false,overdrive=false){
+  $('#editorWrap').classList.toggle('typing-live',active);
+  $('#typingHud').classList.toggle('show',active||state.typing);
+  $('#typingHud').classList.toggle('waiting',waiting);
+  $('#typingHud').classList.toggle('overdrive',overdrive);
+  $('#typingBtn').classList.toggle('typing-on',state.typing);
+  $('#typingBtn').textContent=state.typing?(overdrive?'⚡ 空格超频中':active?'⌨ 智能手打中':'⌨ 默认 · 10字符/键'):'⌨ 普通编辑';
+  document.body.classList.toggle('typing-overdrive',active);
+}
+function toggleTyping(force){
+  state.typing=force!==undefined?force:!state.typing;
+  if(!state.typing){state.typingAbort=true;state.typingQueue=0;}
+  setTypingUI(state.typingInProgress,state.typing&&!state.typingInProgress,false);
+  if(state.typing){
+    state.typingAbort=false;$('#typingRate').textContent='10 字符/键';$('#typingHint').textContent='普通键 ×10 · 空格超频';
+    toast('智能手打已开启','每次普通按键生成 10 个连续语法字符；空格触发高速代码洪流和全屏特效。','success');
+    $('#editor').focus();
+  }else toast('智能手打已关闭','编辑器恢复为正常逐字输入。');
+}
+function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+function insertGeneratedText(text){
+  const el=$('#editor'),pos=el.selectionStart;
+  el.setRangeText(text,pos,pos,'end');
+  state.files[state.current].code=el.value;state.dirty.add(state.current);
+  $('#saveState').textContent='未保存';
+}
+function refreshTypingEditor(){
+  updateLines();updateCursorStatus();renderFiles();
+  const el=$('#editor');el.scrollTop=Math.max(0,el.scrollHeight-el.clientHeight*.72);$('#lineNumbers').scrollTop=el.scrollTop;
+}
+function enqueueTyping(count,overdrive=false){
+  state.typingQueue+=count;
+  if(overdrive)state.typingOverdriveUntil=Math.max(state.typingOverdriveUntil,performance.now()+850);
+  processTypingQueue();
+}
+async function processTypingQueue(){
+  if(state.typingInProgress||!state.typing)return;
+  state.typingInProgress=true;state.typingAbort=false;state.typingRuns++;
+  const el=$('#editor');el.focus();
+  let emitted=0,completedBlocks=0,lastRefresh=0;
+  term(`keystroke-generator: burst #${state.typingRuns} queued (${state.typingQueue} chars)`,'term-cyan');
+  try{
+    while(state.typingQueue>0&&!state.typingAbort&&state.typing){
+      const overdrive=performance.now()<state.typingOverdriveUntil;
+      const stride=overdrive?Math.min(state.typingQueue,choose([3,4,5,6])):1;
+      let chunk='';
+      for(let i=0;i<stride;i++){
+        const next=nextSyntaxCharacter();chunk+=next.ch;
+        if(next.blockDone)completedBlocks++;
+      }
+      insertGeneratedText(chunk);state.typingQueue-=stride;emitted+=stride;
+      $('#typingRate').textContent=overdrive?`${Math.max(40,state.typingQueue+emitted)} 字符洪流`:'10 字符/键';
+      $('#typingHint').textContent=overdrive?'SPACE OVERDRIVE · FULLSCREEN FX':`BURST +${String(emitted).padStart(2,'0')} CHARS`;
+      setTypingUI(true,false,overdrive);
+      if(performance.now()-lastRefresh>42){refreshTypingEditor();lastRefresh=performance.now();}
+      if(Math.random()<(overdrive?.72:.25))beep(rand(overdrive?520:360,overdrive?980:720),.012,choose(['square','triangle']),overdrive?.009:.004);
+      await sleep(overdrive?rand(1,3.5):rand(5,10));
+    }
+    refreshTypingEditor();
+    if(completedBlocks){
+      state.score+=completedBlocks*180;updateStatus();
+      term(`syntax stream accepted: ${completedBlocks} coherent block(s) completed`,'term-ok');
+      triggerCompletionFX();
+    }
+  }catch(err){console.error(err)}finally{
+    state.typingInProgress=false;state.typingAbort=false;
+    const stillOver=performance.now()<state.typingOverdriveUntil;
+    setTimeout(()=>{if(!state.typingInProgress){setTypingUI(false,state.typing,false);$('#typingRate').textContent='10 字符/键';$('#typingHint').textContent='普通键 ×10 · 空格超频';}},stillOver?900:180);
+  }
+}
+function typingKeyPulse(overdrive=false){
+  const hud=$('#typingHud');hud.animate([{transform:'scale(1)'},{transform:`scale(${overdrive?1.10:1.035})`},{transform:'scale(1)'}],{duration:overdrive?230:110});
+}
+function triggerSpaceOverdriveFX(burst){
+  const center={x:innerWidth*.5,y:innerHeight*.43};
+  $('#fxLayer').innerHTML='';document.body.classList.add('key-overdrive');
+  fxNode('fx-whiteout');completionParticles(choose([36,46,58]),center.x,center.y);
+  const mode=choose(['rings','glitch','rain','beams']);
+  if(mode==='rings'){
+    ['#ffffff','#52d6e8','#b695ff'].forEach((c,i)=>setTimeout(()=>fxNode('fx-ring',{'--x':center.x+'px','--y':center.y+'px','--ring':c}),i*55));
+  }else if(mode==='glitch'){
+    document.body.classList.add('fx-glitch');
+    for(let i=0;i<10;i++)setTimeout(()=>fxNode('fx-glitch-bar',{'--y':rand(2,98)+'%','--h':rand(3,20)+'px','--c':choose(['#ffffff','#52d6e8','#ff5e66','#b695ff'])}),i*18);
+  }else if(mode==='rain'){
+    for(let i=0;i<28;i++)fxNode('fx-rain',{'--x':rand(0,100)+'%','--c':choose(['#ffffff','#52d6e8','#46d17a','#b695ff']),'--fs':rand(10,19)+'px','--d':rand(.48,.95)+'s'},choose(['SPACE','OVERCLOCK','0xFF','NEXUS','BURST','101101']));
+  }else{
+    document.body.classList.add('fx-overclock');
+    for(let i=0;i<20;i++)fxNode('fx-beam',{'--r':(i*18+rand(-5,5))+'deg','--c':choose(['#ffffff','#52d6e8','#58a6ff','#b695ff'])});
+  }
+  showCompletionBanner('KEYSTROKE OVERDRIVE',`${burst} CHAR BURST · SPACE ACCELERATOR`);
+  beep(260,.045,'sawtooth',.025);setTimeout(()=>beep(720,.07,'square',.03),45);setTimeout(()=>beep(1080,.09,'sine',.025),105);
+  setTimeout(()=>{document.body.classList.remove('key-overdrive','fx-glitch','fx-overclock');$('#fxLayer').innerHTML='';},1050);
+}
+document.addEventListener('keydown',e=>{
+  if(!state.typing||document.activeElement!==$('#editor')||e.ctrlKey||e.metaKey||e.altKey)return;
+  if(e.key==='Escape'){e.preventDefault();state.typingAbort=true;state.typingQueue=0;return;}
+  if(e.key==='Tab')return;
+  if(e.code==='Space'||e.key===' '){
+    e.preventDefault();typingKeyPulse(true);
+    const burst=choose([48,56,64,72]);
+    $('#typingRate').textContent=`${burst} 字符超频`;$('#typingHint').textContent='SPACE OVERDRIVE · FULLSCREEN FX';
+    triggerSpaceOverdriveFX(burst);enqueueTyping(burst,true);return;
+  }
+  if(e.key.length!==1)return;
+  e.preventDefault();typingKeyPulse(false);enqueueTyping(10,false);
+});
+
+/* Random implementation-complete spectacle */
+function fxNode(cls,styles={},html=''){
+  const el=document.createElement('div');el.className=cls;el.innerHTML=html;
+  Object.entries(styles).forEach(([k,v])=>el.style.setProperty(k,v));$('#fxLayer').appendChild(el);return el;
+}
+function clearFX(delay=2200){setTimeout(()=>{$('#fxLayer').innerHTML='';document.body.classList.remove('fx-glitch','fx-overclock','fx-prism')},delay)}
+function completionParticles(count=52,originX=innerWidth*.5,originY=innerHeight*.43){
+  const colors=['#52d6e8','#58a6ff','#b695ff','#46d17a','#ffffff'];
+  for(let i=0;i<count;i++){
+    const a=rand(0,Math.PI*2),dist=rand(90,Math.min(innerWidth,innerHeight)*.55);
+    fxNode('fx-particle',{'--x':originX+'px','--y':originY+'px','--dx':Math.cos(a)*dist+'px','--dy':Math.sin(a)*dist+'px','--size':rand(2,7)+'px','--d':rand(.55,1.25)+'s','--r':rand(0,180)+'deg','--c':choose(colors)});
+  }
+}
+function showCompletionBanner(title,sub){
+  $('#completionTitle').textContent=title;$('#completionSub').textContent=sub;
+  const b=$('#completionBanner');b.classList.remove('show');void b.offsetWidth;b.classList.add('show');
+}
+function triggerCompletionFX(){
+  $('#fxLayer').innerHTML='';
+  const center={x:innerWidth*.5,y:innerHeight*.43};
+  fxNode('fx-whiteout');completionParticles(58,center.x,center.y);
+  const mode=choose(['shockwave','glitch','rain','overclock','prism']);
+  const labels={
+    shockwave:['IMPLEMENTATION ONLINE','QUANTUM COMMIT / ATOMIC SUCCESS'],
+    glitch:['RUNTIME OVERRIDDEN','GLITCH SIGNATURE ACCEPTED'],
+    rain:['CODE MATRIX LOCKED','SYNTAX STREAM COMPILED / ZERO DROPPED CHARS'],
+    overclock:['OVERCLOCK COMPLETE','SPACE BURST · CORE TEMPERATURE NOMINAL'],
+    prism:['NEXUS SYNCHRONIZED','PRISMATIC RENDER PIPELINE ENGAGED']
+  };
+  showCompletionBanner(...labels[mode]);
+  if(mode==='shockwave'){
+    ['#52d6e8','#b695ff','#46d17a'].forEach((c,i)=>setTimeout(()=>fxNode('fx-ring',{'--x':center.x+'px','--y':center.y+'px','--ring':c}),i*90));
+  }else if(mode==='glitch'){
+    document.body.classList.add('fx-glitch');
+    for(let i=0;i<12;i++)setTimeout(()=>fxNode('fx-glitch-bar',{'--y':rand(4,96)+'%','--h':rand(2,18)+'px','--c':choose(['#52d6e8','#ff5e66','#b695ff'])}),i*24);
+  }else if(mode==='rain'){
+    for(let i=0;i<34;i++)fxNode('fx-rain',{'--x':rand(0,100)+'%','--c':choose(['#52d6e8','#46d17a','#b695ff']),'--fs':rand(9,18)+'px','--d':rand(.75,1.55)+'s'},choose(['01NX7A','COMMIT','110010','TOKYO03','RUNTIME','✓✓✓']));
+  }else if(mode==='overclock'){
+    document.body.classList.add('fx-overclock');
+    for(let i=0;i<18;i++)fxNode('fx-beam',{'--r':(i*20+rand(-6,6))+'deg','--c':choose(['#52d6e8','#58a6ff','#ffffff'])});
+  }else{
+    document.body.classList.add('fx-prism');
+    for(let i=0;i<24;i++)fxNode('fx-beam',{'--r':(i*15)+'deg','--c':`hsl(${i*15} 90% 70%)`});
+    ['#52d6e8','#ff5e66','#e4b84d'].forEach((c,i)=>setTimeout(()=>fxNode('fx-ring',{'--x':center.x+'px','--y':center.y+'px','--ring':c}),i*70));
+  }
+  beep(330,.08,'sawtooth',.025);setTimeout(()=>beep(660,.09,'triangle',.03),70);setTimeout(()=>beep(990,.16,'sine',.035),155);
+  clearFX(2200);
+}
+
+/* General commands */
+function runCommand(cmd){switch(cmd){case'save':save();break;case'saveAll':save(true);break;case'newFile':newFile();break;case'format':formatDocument();break;case'run':build();break;case'scan':scan();break;case'hunt':toggleHunt();break;case'purge':purgePoops();break;case'restore':restoreLastBite();break;case'panic':panic();break;case'palette':showPalette();break;case'terminal':$('#termInput').focus();break;case'toggleMonitor':state.monitorVisible=!state.monitorVisible;$('#shell').style.gridTemplateColumns=state.monitorVisible?'46px 226px minmax(450px,1fr) 260px':'46px 226px minmax(450px,1fr) 0px';$('#monitor').style.display=state.monitorVisible?'flex':'none';break;case'fullscreen':document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();break;case'toggleTyping':toggleTyping();break;case'completionFx':triggerCompletionFX();break;case'help':showPalette();break;case'about':toast('NEXUS Wasteland Edition','单文件离线演示：真实编辑、遥测、构建流水线与生态防疫玩法。','success');break;case'reset':if(confirm('恢复初始文件和任务进度？')){storage.remove('nexus-files');location.reload()}break;}}
+window.addEventListener('keydown',e=>{if(e.ctrlKey&&e.shiftKey&&e.key.toLowerCase()==='p'){e.preventDefault();showPalette()}else if(e.ctrlKey&&e.key.toLowerCase()==='s'){e.preventDefault();save()}else if(e.ctrlKey&&e.key.toLowerCase()==='n'){e.preventDefault();newFile()}else if(e.key==='F5'){e.preventDefault();build()}else if(e.key==='F8'){e.preventDefault();scan()}else if(e.key==='F9'){e.preventDefault();toggleTyping()}else if(e.key.toLowerCase()==='h'&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){toggleHunt()}else if(e.key==='Escape'){hidePalette();if(state.huntMode)toggleHunt(false)}});
+
+/* Helpers */
+function toast(title,sub='',kind=''){const el=document.createElement('div');el.className=`toast ${kind}`;el.innerHTML=`<div class="toast-title">${escapeHTML(title)}</div><div class="toast-sub">${escapeHTML(sub)}</div>`;$('#toastStack').appendChild(el);setTimeout(()=>{el.style.opacity='0';el.style.transform='translateX(20px)';setTimeout(()=>el.remove(),250)},3600)}
+function clock(){const d=new Date();$('#clock').textContent=d.toLocaleTimeString('zh-CN',{hour12:false});}clock();setInterval(clock,1000);
+$('#newFileBtn').onclick=newFile;
+
+renderFiles();loadEditor();updateMissions();updateContamination();updateStatus();telemetryTick();setTypingUI(false,true);
+})();
+</script>
+</body>
+</html>
